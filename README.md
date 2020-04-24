@@ -1,23 +1,31 @@
 # dvfile-python
 
 #### 介绍
-试图解析Deepvocal dv文件的python库
 
-#### 软件架构
-软件架构说明
+试图解析Deepvocal dv文件的python库。
 
+由于dv文件为二进制文件，且没有官方文档或解析器，本项目无法保证与deepvocal完美兼容，如遇到文件解析错误欢迎在issue中提出。
 
-#### 安装教程
+#### 安装
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+暂未上架pypi，请下载dvfile文件夹，复制到python目录下的Lib文件夹中。
 
-#### 使用说明
+#### 功能
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+目前可以解析的内容：
+
+- 曲速标记：位置、曲速
+- 节拍标记：位置、每小节拍数、音符分数
+- 音轨属性：音轨名、音轨音量
+- 区段属性：区段名、区段音源名、起点、长度
+- 音符属性：起点、长度、音高、歌词汉字、歌词拼音
+
+目前不能解析的内容：
+
+- 伴奏音轨
+- 音轨属性：双声道平衡
+- 区段参数：音量、音调、气声、声线
+- 音符属性：音素、颤音、滑音
 
 #### 参与贡献
 
@@ -25,13 +33,3 @@
 2.  新建 Feat_xxx 分支
 3.  提交代码
 4.  新建 Pull Request
-
-
-#### 码云特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  码云官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解码云上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是码云最有价值开源项目，是码云综合评定出的优秀开源项目
-5.  码云官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  码云封面人物是一档用来展示码云会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
