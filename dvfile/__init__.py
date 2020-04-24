@@ -1,3 +1,5 @@
+__version__='0.0.1'
+
 import copy
 import numpy
 from utaufile import Ustfile,Ustnote
