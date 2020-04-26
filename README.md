@@ -27,6 +27,19 @@
 - 区段参数：音量、音调、气声、声线
 - 音符属性：音素、颤音、滑音
 
+#### 示例
+
+```py
+import dvfile as df
+#打开dv文件
+d=df.opendv("myproject.dv")
+#导出为mid文件
+d.to_midi_file().save("myproject.mid")
+#每个音轨单独导出为ust文件
+for (i,t) in enumerate(dvfile.track):
+    t.to_ust_file().save('myproject{}.ust'.format(i))
+```
+
 #### 参与贡献
 
 1.  Fork 本仓库
