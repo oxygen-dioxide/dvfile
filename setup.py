@@ -20,7 +20,7 @@ URL = 'https://gitee.com/oxygendioxide/dvfile'
 EMAIL = '1463567152@qq.com'    
 AUTHOR = 'oxygen dioxide'
 REQUIRES_PYTHON = '>=3.6.0' 
-VERSION = '0.0.1'
+VERSION = '0.0.2'
     
 REQUIRED = ["mido","numpy","utaufile"]    
 EXTRAS = {}

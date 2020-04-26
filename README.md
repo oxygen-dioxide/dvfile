@@ -8,7 +8,7 @@
 
 #### 安装
 
-暂未上架pypi，请下载dvfile文件夹，复制到python目录下的Lib文件夹中。
+> pip install dvfile
 
 #### 功能
 

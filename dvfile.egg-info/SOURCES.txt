@@ -1,0 +1,8 @@
+README.md
+setup.py
+dvfile/__init__.py
+dvfile.egg-info/PKG-INFO
+dvfile.egg-info/SOURCES.txt
+dvfile.egg-info/dependency_links.txt
+dvfile.egg-info/requires.txt
+dvfile.egg-info/top_level.txt
