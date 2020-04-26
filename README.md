@@ -36,7 +36,7 @@ d=df.opendv("myproject.dv")
 #导出为mid文件
 d.to_midi_file().save("myproject.mid")
 #每个音轨单独导出为ust文件
-for (i,t) in enumerate(dvfile.track):
+for (i,t) in enumerate(d.track):
     t.to_ust_file().save('myproject{}.ust'.format(i))
 ```
 
