@@ -1,4 +1,4 @@
-__version__='0.0.1'
+__version__='0.0.2'
 
 import copy
 import numpy
@@ -22,17 +22,32 @@ class Dvnote():
     notenum:音高，与midi相同，即C4为60，音高越高，数值越大，int
     hanzi:歌词汉字，str
     pinyin:歌词拼音，str
+    benlen:弯曲长度，int
+    bendep:弯曲深度，int
+    porhead:头部滑音长度，int
+    portail:尾部滑音长度，int
+    timbre：采样音阶，-1表示跟随音高，0表示T1，1表示T2，以此类推，int
     '''
     def __init__(self,start:int,
                  length:int,
                  notenum:int,
                  pinyin:str,
-                 hanzi:str):
+                 hanzi:str,
+                 benlen:int=0,
+                 bendep:int=0,
+                 porhead:int=0,
+                 portail:int=20,
+                 timbre=-1):
         self.start=start
         self.length=length
         self.notenum=notenum
         self.pinyin=pinyin
         self.hanzi=hanzi
+        self.benlen=benlen
+        self.bendep=bendep
+        self.porhead=porhead
+        self.portail=portail
+        self.timbre=timbre
     
     def __str__(self):
         return "   {} {} {} {} {}\n".format(
@@ -63,7 +78,7 @@ class Dvsegment():
         self.note=note
         
     def __str__(self):
-        s="  {} {} {} {}\n".format(
+        s="  segment {} {} {} {}\n".format(
             self.start,
             self.length,
             self.name,
@@ -88,6 +103,18 @@ class Dvsegment():
     def __radd__(self,other):
         #为适配sum，规定：其他类型+Dvsegment返回原Dvsegment
         return self
+    
+    def getlyric(self,use_hanzi=False,ignore=set()):
+        lyrics=[]
+        if(use_hanzi):
+            for n in self.note:
+                if(not(n.hanzi in ignore)):
+                    lyrics+=[n.hanzi]
+        else:
+            for n in self.note:
+                if(not(n.pinyin in ignore)):
+                    lyrics+=[n.pinyin]
+        return lyrics
     
     def to_ust_file(self,use_hanzi:bool=False):
         '''
@@ -138,6 +165,8 @@ class Dvsegment():
         '''
         切去开始时间为负数的音符，以及结束时间大于区段长度的音符
         （这些音符在deepvocal编辑器中是无效音符）
+        head:是否切去开始时间为负数的音符,bool
+        tail:是否切去结束时间大于区段长度的音符,bool
         '''
         if(head):
             for i in range(0,len(self.note)):
@@ -200,10 +229,10 @@ class Dvfile():
     tempo:曲速标记列表，
         曲速标记：(位置,曲速)
     beats:节拍标记列表
-        节拍标记：(小节数位置,每小节拍数,x分音符为1拍)
+        节拍标记：(小节数位置,每小节拍数,x分音符为1拍(只能为1,2,4,8,16,32))
     track:音轨列表
     '''
-    def __init__(self,tempo:list=[],beats:list=[],track:list=[]):
+    def __init__(self,tempo:list=[(0,120.0)],beats:list=[(-3,4,4)],track:list=[]):
         self.tempo=tempo
         self.beats=beats
         self.track=track
@@ -232,6 +261,53 @@ class Dvfile():
         if(filename!=""):
             mid.save(filename)
         return mid
+    
+    def pos2tick(self,bar,beat=1,tick=0):
+        '''
+        根据beats进行时间换算：
+        输入：（小节，拍子，拍内位置）（dv gui上的SONG POS）
+        输出：从-3小节开始，四分音符为480的时间
+        '''
+        beats=self.beats
+        for i in range(0,len(beats)):
+            if(beats[i][0]>bar):
+                beats=beats[0:i]
+                break
+        beats+=[(bar,beats[-1][1],beats[-1][2])]
+        t=0
+        for i in range(0,len(beats)-1):
+            t+=(beats[i+1][0]-beats[i][0])*beats[i][1]*1920//beats[i][2]
+        t+=(beat-1)*1920//beats[i][2]+tick
+        return t
+    
+    def tick2time(self,tick:int):
+        '''
+        根据tempo进行时间换算：
+        输入：从-3小节开始，四分音符为480的时间
+        输出：从-3小节开始，以秒为单位的时间
+        '''
+        tempos=self.tempo
+        for i in range(0,len(tempos)):
+            if(tempos[i][0]>tick):
+                tempos=tempos[0:i]
+                break
+        tempos+=[(tick,tempos[-1][1])]
+        t=0.0
+        for i in range(0,len(tempos)-1):
+            t+=(tempos[i+1][0]-tempos[i][0])/8/tempos[i][1]
+        return t
+        
+    def to_ust_file(self,use_hanzi:bool=False)->list:
+        '''
+        将dv文件按音轨转换为ust文件对象的列表
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
+        usts=[]
+        for track in self.track:
+            ust=track.to_ust_file()
+            ust.properties["Tempo"]=self.tempo[0][1]
+            usts+=[ust]
+        return usts
     
 def opendv(filename:str):
     '''
@@ -275,7 +351,6 @@ def opendv(filename:str):
                         file.read(4)
                         pinyin=skreadstr(file)
                         hanzi=skreadstr(file)
-                        note+=[Dvnote(start,length,notenum,pinyin,hanzi)]
                         file.read(1)
                         skreadbytes(file)
                         skreadbytes(file)
@@ -288,6 +363,9 @@ def opendv(filename:str):
                         timbre=skreadint(file)#音阶
                         cross=skreadstr(file)#交叉
                         crotim=skreadint(file)#交叉音阶
+                        note+=[Dvnote(start,length,notenum,pinyin,hanzi,
+                                      benlen,bendep,porhead,portail,
+                                      timbre)]
                     skreadbytes(file)
                     skreadbytes(file)
                     skreadbytes(file)
@@ -306,5 +384,5 @@ def opendv(filename:str):
     return Dvfile(tempo=tempo,beats=beats,track=track)
 
 if(__name__=="__main__"):
-    print(opendv(r'C:/Users/lin/Desktop/1.dv'))
+    print(opendv(r'C:/Users/lin/Desktop/1.dv').pos2tick(9,2,0))
     

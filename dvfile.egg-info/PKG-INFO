@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: dvfile
-Version: 0.0.1
+Version: 0.0.2
 Summary: Read deepvocal dv file
 Home-page: https://gitee.com/oxygendioxide/dvfile
 Author: oxygen dioxide
@@ -17,7 +17,7 @@ Description:
         
         #### 安装
         
-        暂未上架pypi，请下载dvfile文件夹，复制到python目录下的Lib文件夹中。
+        > pip install dvfile
         
         #### 功能
         
@@ -35,6 +35,19 @@ Description:
         - 音轨属性：双声道平衡
         - 区段参数：音量、音调、气声、声线
         - 音符属性：音素、颤音、滑音
+        
+        #### 示例
+        
+        ```py
+        import dvfile as df
+        #打开dv文件
+        d=df.opendv("myproject.dv")
+        #导出为mid文件
+        d.to_midi_file().save("myproject.mid")
+        #每个音轨单独导出为ust文件
+        for (i,t) in enumerate(d.track):
+            t.to_ust_file().save('myproject{}.ust'.format(i))
+        ```
         
         #### 参与贡献
         
