@@ -2,7 +2,7 @@ import os
 import sys
 import dvfile as df
 
-#使用dv文件制作lrc歌词
+#使用dv文件制作lrc歌词，依赖dvfile模块
 #使用方法：python dvlrc.py xxx.dv，选择音轨，在弹出的记事本窗口中用换行断句，保存。lrc文件将输出至原dv文件夹下。
 #默认在windows下运行，如果需要在其他操作系统下运行，请重写texteditor函数（打开文本编辑器编辑输入字符串，并返回编辑后的字符串）
 def texteditor(text):

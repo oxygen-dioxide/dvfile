@@ -1,8 +1,11 @@
-__version__='0.0.2'
+__version__='0.0.3'
 
 import copy
 import numpy
 from utaufile import Ustfile,Ustnote
+
+#midi库分为两种，一种基于事件，另一种基于音符。基于音符的midi库更适合本工程
+#但是我还没有找到支持歌词的基于音符的midi库，所以选择了基于事件的mido
 from mido import Message, MidiFile, MidiTrack, MetaMessage, bpm2tempo
 
 def skreadint(file):
@@ -27,6 +30,11 @@ class Dvnote():
     porhead:头部滑音长度，int
     portail:尾部滑音长度，int
     timbre：采样音阶，-1表示跟随音高，0表示T1，1表示T2，以此类推，int
+    vibamp:颤音幅度曲线
+    vibfre:颤音速度曲线
+    vibp:渲染出的颤音音高曲线，以音分为单位，上下颠倒
+    crolrc:交叉拼音，str
+    crotim:交叉音阶，int
     '''
     def __init__(self,start:int,
                  length:int,
@@ -37,7 +45,12 @@ class Dvnote():
                  bendep:int=0,
                  porhead:int=0,
                  portail:int=20,
-                 timbre=-1):
+                 timbre:int=-1,
+                 vibamp=numpy.array([]),
+                 vibfre=numpy.array([]),
+                 vibp=numpy.array([]),
+                 crolrc:str="",
+                 crotim:int=-1):
         self.start=start
         self.length=length
         self.notenum=notenum
@@ -48,6 +61,11 @@ class Dvnote():
         self.porhead=porhead
         self.portail=portail
         self.timbre=timbre
+        self.vibamp=vibamp
+        self.vibfre=vibfre
+        self.vibp=vibp
+        self.crolrc=crolrc
+        self.crotim=crotim
     
     def __str__(self):
         return "   {} {} {} {} {}\n".format(
@@ -104,7 +122,7 @@ class Dvsegment():
         #为适配sum，规定：其他类型+Dvsegment返回原Dvsegment
         return self
     
-    def getlyric(self,use_hanzi=False,ignore=set()):
+    def getlyric(self,use_hanzi:bool=False,ignore:set=set()):
         lyrics=[]
         if(use_hanzi):
             for n in self.note:
@@ -161,7 +179,7 @@ class Dvsegment():
         self.note=sorted(self.note,key=sortkey)
         return self
         
-    def cut(self,head=True,tail=True):
+    def cut(self,head:bool=True,tail:bool=True):
         '''
         切去开始时间为负数的音符，以及结束时间大于区段长度的音符
         （这些音符在deepvocal编辑器中是无效音符）
@@ -221,8 +239,32 @@ class Dvtrack():
         默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
         '''
         s=sum(self.segment,Dvsegment(0,0))
-        return s.to_midi_track()
+        return s.to_midi_track(use_hanzi)
         
+class Dvinst():
+    '''
+    dv伴奏音轨类
+    start:开始时间
+    filename:文件名
+    name:伴奏音轨名
+    volume:音量
+    mute:静音
+    solo:独奏
+    '''
+    def __init__(self,
+                 start:int,
+                 filename:str="",
+                 name:str="",
+                 volume:int=30,
+                 mute:bool=False,
+                 solo:bool=False,
+                 ):
+        self.name=name
+        self.volume=volume
+        #self.balance=balance
+        self.mute=mute
+        self.solo=solo
+
 class Dvfile():
     '''
     dv文件类
@@ -231,11 +273,17 @@ class Dvfile():
     beats:节拍标记列表
         节拍标记：(小节数位置,每小节拍数,x分音符为1拍(只能为1,2,4,8,16,32))
     track:音轨列表
+    inst:伴奏音轨列表
     '''
-    def __init__(self,tempo:list=[(0,120.0)],beats:list=[(-3,4,4)],track:list=[]):
+    def __init__(self,
+                 tempo:list=[(0,120.0)],
+                 beats:list=[(-3,4,4)],
+                 track:list=[],
+                 inst:list=[]):
         self.tempo=tempo
         self.beats=beats
         self.track=track
+        self.inst=inst
         
     def __str__(self):
         s="{}\n{}\n".format(self.tempo,self.beats)
@@ -257,12 +305,24 @@ class Dvfile():
             tick=i[0]
         mid.tracks.append(ctrltrack)
         for i in self.track:
-            mid.tracks.append(i.to_midi_track(use_hanzi=use_hanzi))
+            mid.tracks.append(i.to_midi_track(use_hanzi))
         if(filename!=""):
             mid.save(filename)
         return mid
     
-    def pos2tick(self,bar,beat=1,tick=0):
+    def to_ust_file(self,use_hanzi:bool=False)->list:
+        '''
+        将dv文件按音轨转换为ust文件对象的列表
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
+        usts=[]
+        for track in self.track:
+            ust=track.to_ust_file()
+            ust.properties["Tempo"]=self.tempo[0][1]
+            usts+=[ust]
+        return usts
+    
+    def pos2tick(self,bar:int,beat:int=1,tick:int=0)->int:
         '''
         根据beats进行时间换算：
         输入：（小节，拍子，拍内位置）（dv gui上的SONG POS）
@@ -280,7 +340,27 @@ class Dvfile():
         t+=(beat-1)*1920//beats[i][2]+tick
         return t
     
-    def tick2time(self,tick:int):
+    def tick2pos(self,tick:int)->tuple:
+        '''
+        根据beats进行时间换算：
+        输入：从-3小节开始，四分音符为480的时间
+        输出：元组（小节，拍子，拍内位置）（dv gui上的SONG POS）
+        '''
+        beats=self.beats
+        t=0
+        for i in range(0,len(beats)-1):
+            tc=t+(beats[i+1][0]-beats[i][0])*beats[i][1]*1920//beats[i][2]
+            if(tc<tick):
+                t=tc
+            else:
+                beats=beats[0:i+1]
+                break
+        bar=beats[-1][0]+int((tick-t)//(beats[-1][1]*1920/beats[i][2]))
+        beat=int((tick-t)%(beats[-1][1]*1920/beats[i][2]))//(1920//beats[i][2])+1
+        tick=(tick-t)%(1920//beats[i][2])
+        return (bar,beat,tick)
+    
+    def tick2time(self,tick:int)->float:
         '''
         根据tempo进行时间换算：
         输入：从-3小节开始，四分音符为480的时间
@@ -294,20 +374,26 @@ class Dvfile():
         tempos+=[(tick,tempos[-1][1])]
         t=0.0
         for i in range(0,len(tempos)-1):
-            t+=(tempos[i+1][0]-tempos[i][0])/8/tempos[i][1]
+            t+=(tempos[i+1][0]-tempos[i][0])/(8*tempos[i][1])
         return t
-        
-    def to_ust_file(self,use_hanzi:bool=False)->list:
+    
+    def time2tick(self,time:float)->int:
         '''
-        将dv文件按音轨转换为ust文件对象的列表
-        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        根据tempo进行时间换算：
+        输入：从-3小节开始，以秒为单位的时间
+        输出：从-3小节开始，四分音符为480的时间
         '''
-        usts=[]
-        for track in self.track:
-            ust=track.to_ust_file()
-            ust.properties["Tempo"]=self.tempo[0][1]
-            usts+=[ust]
-        return usts
+        tempos=self.tempo
+        t=0
+        for i in range(0,len(tempos)-1):
+            tc=t+(tempos[i+1][0]-tempos[i][0])/(8*tempos[i][1])
+            if(tc<time):
+                t=tc
+            else:
+                tempos=tempos[0:i+1]
+                break
+        tick=tempos[-1][0]+int((time-t)*8*tempos[-1][1])
+        return tick
     
 def opendv(filename:str):
     '''
@@ -325,14 +411,16 @@ def opendv(filename:str):
         for i in range(0,skreadint(file)):
             beats+=[tuple(numpy.fromfile(file,"<i4",3))]
         track=[]
+        inst=[]
         for i in range(0,skreadint(file)):
             #读音轨
             tracktype=skreadint(file)#合成音轨0，伴奏1
             if(tracktype==0):
                 trackname=skreadstr(file)
-                file.read(2)
+                mute=(file.read(1)==b'\x01')
+                solo=(file.read(1)==b'\x01')
                 volume=skreadint(file)
-                file.read(4)#balance
+                file.read(4)#左右声道平衡
                 file.read(4)#区段占用空间
                 segment=[]
                 for i in range(0,skreadint(file)):
@@ -352,8 +440,15 @@ def opendv(filename:str):
                         pinyin=skreadstr(file)
                         hanzi=skreadstr(file)
                         file.read(1)
-                        skreadbytes(file)
-                        skreadbytes(file)
+                        #以下是数据块1,包含颤音幅度线和颤音速度线
+                        data1=numpy.fromfile(file,"<i4",skreadint(file)//4)#未知数据块1,包含滑音幅度线和频率线
+                        vibamp=data1[2:2+data1[1]*2].reshape([-1,2])#颤音幅度线
+                        data1=data1[2+data1[1]*2:]
+                        vibfre=data1[2:2+data1[1]*2].reshape([-1,2])#颤音速度线
+                        data1=data1[2+data1[1]*2:]
+                        vibp=data1[2:2+data1[1]*2].reshape([-1,2])#渲染出的颤音音高曲线
+                        #以上是未知数据块1
+                        data2=numpy.fromfile(file,"<i4",skreadint(file)//4)#未知数据块2###
                         file.read(2)
                         file.read(16)#音素
                         benlen=skreadint(file)#弯曲长度
@@ -361,11 +456,12 @@ def opendv(filename:str):
                         porhead=skreadint(file)#头部滑音长度
                         portail=skreadint(file)#尾部滑音长度
                         timbre=skreadint(file)#音阶
-                        cross=skreadstr(file)#交叉
+                        crolrc=skreadstr(file)#交叉拼音
                         crotim=skreadint(file)#交叉音阶
                         note+=[Dvnote(start,length,notenum,pinyin,hanzi,
                                       benlen,bendep,porhead,portail,
-                                      timbre)]
+                                      timbre,vibamp,vibfre,vibp,crolrc,crotim)]
+                    #以下是音轨参数
                     skreadbytes(file)
                     skreadbytes(file)
                     skreadbytes(file)
@@ -373,16 +469,19 @@ def opendv(filename:str):
                     skreadbytes(file)
                     skreadbytes(file)
                     skreadbytes(file)
+                    #TODO
                     segment+=[Dvsegment(segstart,seglength,segname,vbname,note)]
-                track+=[Dvtrack(trackname,segment,volume)]
+                track+=[Dvtrack(trackname,segment,volume,mute,solo)]
             else:
-                skreadbytes(file)
-                file.read(2)
+                trackname=skreadstr(file)
+                mute=(file.read(1)==b'\x01')
+                solo=(file.read(1)==b'\x01')
+                volume=skreadint(file)
+                file.read(4)
+                file.read(4)
                 skreadint(file)
-                skreadint(file)
-                skreadbytes(file)
-    return Dvfile(tempo=tempo,beats=beats,track=track)
-
-if(__name__=="__main__"):
-    print(opendv(r'C:/Users/lin/Desktop/1.dv').pos2tick(9,2,0))
-    
+                segstart=skreadint(file)
+                seglength=skreadint(file)
+                fname=skreadstr(file)
+                inst+=[Dvinst(segstart,fname,trackname,volume,mute,solo)]
+    return Dvfile(tempo=tempo,beats=beats,track=track,inst=inst)

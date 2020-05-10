@@ -2,7 +2,9 @@
 
 #### 介绍
 
-解析[Deepvocal](https://www.deep-vocal.com/) dv文件的python库。
+解析[deepvocal](https://www.deep-vocal.com/) dv文件的python库。
+
+本python库依赖numpy utaufile mido
 
 由于dv文件为二进制文件，且没有官方文档或解析器，本项目无法保证与deepvocal完美兼容，如遇到文件解析错误欢迎在issue中提出。
 
@@ -11,6 +13,10 @@
 > pip install dvfile
 
 #### 功能
+
+- 解析dv文件
+- 导出为ust、midi文件
+- 批量获取歌词
 
 目前可以解析的内容：
 
@@ -31,13 +37,25 @@
 
 ```py
 import dvfile as df
+
 #打开dv文件
 d=df.opendv("myproject.dv")
+
 #导出为mid文件
 d.to_midi_file().save("myproject.mid")
+
 #每个音轨单独导出为ust文件
 for (i,t) in enumerate(d.track):
     t.to_ust_file().save('myproject{}.ust'.format(i))
+
+#获取第0音轨第0区段的歌词（拼音与汉字）列表
+tr=d.track[0]
+seg=tr.segment[0]
+pinyin=seg.getlyric()
+hanzi=seg.getlyric(use_hanzi=True)
+
+#将第0音轨的所有区段合并
+tr.segment=[sum(tr.segment)]
 ```
 
 #### 参与贡献
@@ -46,3 +64,11 @@ for (i,t) in enumerate(d.track):
 2.  新建 Feat_xxx 分支
 3.  提交代码
 4.  新建 Pull Request
+
+#### 相关链接
+
+[deepvocal官网](https://www.deep-vocal.com/)
+
+[sharpkey（deepvocal前身）视频教程](https://www.bilibili.com/video/BV1Us411r7u5)
+
+[deepvocal toolbox 文档](https://share.weiyun.com/5snXMol)
