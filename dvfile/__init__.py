@@ -273,6 +273,16 @@ class Dvtrack():
         self.segment=new_seg
         return self
     
+    def cut(self,head:bool=True,tail:bool=True):
+        '''
+        对音轨中的每个区段，切去开始时间为负数的音符，以及结束时间大于区段长度的音符
+        （这些音符在deepvocal编辑器中是无效音符）
+        head:是否切去开始时间为负数的音符,bool
+        tail:是否切去结束时间大于区段长度的音符,bool
+        '''
+        for seg in self.segment:
+            seg.cut(head=head,tail=tail)
+    
     def to_ust_file(self,use_hanzi:bool=False):
         '''
         将dv音轨对象转换为ust文件对象
@@ -453,6 +463,16 @@ class Dvfile():
             mid.save(filename)
         return mid
     
+    def cut(head=True,tail=True):
+        '''
+        对工程中的每个区段，切去开始时间为负数的音符，以及结束时间大于区段长度的音符
+        （这些音符在deepvocal编辑器中是无效音符）
+        head:是否切去开始时间为负数的音符,bool
+        tail:是否切去结束时间大于区段长度的音符,bool
+        '''
+        for tr in self.track():
+            tr.cut(head=head,tail=tail)
+    
     def to_ust_file(self,use_hanzi:bool=False)->list:
         '''
         将dv文件按音轨转换为ust文件对象的列表
@@ -566,14 +586,7 @@ def opendv(filename:str):
     return Dvfile(tempo=tempo,beats=beats,track=track,inst=inst)
 
 def main():
-    d=opendv(r'C:/Users/lin/Desktop/1.dv')
-    d.quantize(60)
-    for t in d.track:
-        t.segment[0].cut()
-        t.segment[0].note=[i for i in t.segment[0].note if i.hanzi!="0"]
-    s=str(d)
-    sc=d.to_music21_score()
-    sc.show()
+    pass
 
 if(__name__=="__main__"):
     main()
