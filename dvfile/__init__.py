@@ -1,12 +1,8 @@
-__version__='0.0.3'
+__version__='0.0.4'
 
 import copy
 import numpy
 from utaufile import Ustfile,Ustnote
-
-#midi库分为两种，一种基于事件，另一种基于音符。基于音符的midi库更适合本工程
-#但是我还没有找到支持歌词的基于音符的midi库，所以选择了基于事件的mido
-from mido import Message, MidiFile, MidiTrack, MetaMessage, bpm2tempo
 
 def skreadint(file):
     return numpy.fromfile(file,"<i4",1)[0]
@@ -15,7 +11,13 @@ def skreadbytes(file):
     return file.read(skreadint(file))
 
 def skreadstr(file):
-    return str(skreadbytes(file),encoding="utf8")
+    try:
+        return str(skreadbytes(file),encoding="utf8")
+    except:
+        return ""
+
+def intquantize(n,d:int)->int:
+    return int(n/d+0.5)*d
 
 class Dvnote():
     '''
@@ -32,7 +34,7 @@ class Dvnote():
     timbre：采样音阶，-1表示跟随音高，0表示T1，1表示T2，以此类推，int
     vibamp:颤音幅度曲线
     vibfre:颤音速度曲线
-    vibp:渲染出的颤音音高曲线，以音分为单位，上下颠倒
+    vibp:渲染出的颤音音高曲线，单位：（毫秒，音分），上下颠倒，每10ms采样一次
     crolrc:交叉拼音，str
     crotim:交叉音阶，int
     '''
@@ -46,9 +48,9 @@ class Dvnote():
                  porhead:int=0,
                  portail:int=20,
                  timbre:int=-1,
-                 vibamp=numpy.array([]),
-                 vibfre=numpy.array([]),
-                 vibp=numpy.array([]),
+                 vibamp=numpy.array([[-1,0],[0,0],[0,0],[100000,0],[100000,0],[100001,0]]),
+                 vibfre=numpy.array([[-1,0],[0,0],[0,0],[100000,0],[100000,0],[100001,0]]),
+                 vibp=numpy.array([[0,0]]),
                  crolrc:str="",
                  crotim:int=-1):
         self.start=start
@@ -89,6 +91,8 @@ class Dvsegment():
                  name:str="",
                  vbname:str="",
                  note:list=[]):
+        if(note==[]):
+            note=[]
         self.start=start
         self.length=length
         self.name=name
@@ -134,42 +138,6 @@ class Dvsegment():
                     lyrics+=[n.pinyin]
         return lyrics
     
-    def to_ust_file(self,use_hanzi:bool=False):
-        '''
-        将dv区段对象转换为ust文件对象
-        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
-        '''
-        ust=Ustfile()
-        time=0
-        for note in self.note:
-            if(note.start!=time):
-                ust.note+=[Ustnote(length=(note.start-time),lyric="R",notenum=60)]
-            if(use_hanzi):
-                lyric=note.hanzi
-            else:
-                lyric=note.pinyin
-            ust.note+=[Ustnote(length=note.length,lyric=lyric,notenum=note.notenum)]
-            time=note.length+note.start
-        return ust
-    
-    def to_midi_track(self,use_hanzi:bool=False):
-        '''
-        将dv区段对象转换为mido.MidiTrack文件对象
-        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
-        '''
-        track=MidiTrack()
-        time=0
-        for note in self.note:
-            if(use_hanzi):
-                track.append(MetaMessage('lyrics',text=note.hanzi,time=(note.start-time)))
-            else:
-                track.append(MetaMessage('lyrics',text=note.pinyin,time=(note.start-time)))
-            track.append(Message('note_on', note=note.notenum,velocity=64,time=0))
-            track.append(Message('note_off',note=note.notenum,velocity=64,time=note.length))
-            time=note.start+note.length
-        track.append(MetaMessage('end_of_track'))
-        return track
-    
     def sort(self):
         '''
         音符按开始时间排序
@@ -198,6 +166,67 @@ class Dvsegment():
             self.note=self.note[:i+1]
         return self
     
+    def quantize(self,d:int):
+        '''
+        将dv区段按照给定的分度值（四分音符为480）量化。
+        将所有音符的边界四舍五入到d的整数倍，过短的音符将被删除。
+        例如，如果需要量化到八分音符，请使用seg.quantize(240)
+        '''
+        note_new=[]
+        for n in self.note:
+            start=intquantize(self.start+n.start,d)
+            end=intquantize(self.start+n.start+n.length,d)
+            if(end>start):
+                n.start=start-self.start
+                n.length=end-start
+                note_new+=[n]
+        self.note=note_new
+        return self
+    
+    def to_ust_file(self,use_hanzi:bool=False):
+        '''
+        将dv区段对象转换为ust文件对象
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
+        ust=Ustfile()
+        time=0
+        for note in self.note:
+            if(note.start!=time):
+                ust.note+=[Ustnote(length=(note.start-time),lyric="R",notenum=60)]
+            if(use_hanzi):
+                lyric=note.hanzi
+            else:
+                lyric=note.pinyin
+            ust.note+=[Ustnote(length=note.length,lyric=lyric,notenum=note.notenum)]
+            time=note.length+note.start
+        return ust
+    
+    def to_midi_track(self,use_hanzi:bool=False):
+        '''
+        将dv区段对象转换为mido.MidiTrack文件对象
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
+        import mido
+        track=mido.MidiTrack()
+        time=0
+        for note in self.note:
+            if(use_hanzi):
+                track.append(mido.MetaMessage('lyrics',text=note.hanzi,time=(note.start-time)))
+            else:
+                track.append(mido.MetaMessage('lyrics',text=note.pinyin,time=(note.start-time)))
+            track.append(mido.Message('note_on', note=note.notenum,velocity=64,time=0))
+            track.append(mido.Message('note_off',note=note.notenum,velocity=64,time=note.length))
+            time=note.start+note.length
+        track.append(mido.MetaMessage('end_of_track'))
+        return track
+    
+    def to_music21_stream(self,use_hanzi:bool=False):
+        '''
+        将dv区段对象转换为music21 stream，并自动判断调性
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
+        return self.to_ust_file(use_hanzi).to_music21_stream()
+    
 class Dvtrack():
     '''
     dv音轨类
@@ -212,6 +241,8 @@ class Dvtrack():
                  volume:int=30,
                  mute:bool=False,
                  solo:bool=False):
+        if(segment==[]):
+            segment=[]
         self.name=name
         self.volume=volume
         #self.balance=balance
@@ -225,13 +256,30 @@ class Dvtrack():
             s+=str(i)
         return s
         
+    def quantize(self,d:int):
+        '''
+        将dv音轨按照给定的分度值（四分音符为480）量化。
+        将所有音符的边界四舍五入到d的整数倍，过短的音符将被删除。
+        例如，如果需要量化到八分音符，请使用tr.quantize(240)
+        '''
+        new_seg=[]
+        for seg in self.segment:
+            segstart=intquantize(seg.start,d)
+            segend=intquantize(seg.start+seg.length,d)
+            seg=Dvsegment(segstart,0,seg.name,seg.vbname,[])+seg
+            seg.length=segend-segstart
+            seg.quantize(d)
+            new_seg+=[seg]
+        self.segment=new_seg
+        return self
+    
     def to_ust_file(self,use_hanzi:bool=False):
         '''
         将dv音轨对象转换为ust文件对象
         默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
         '''
         s=sum(self.segment,Dvsegment(0,0))
-        return s.to_ust_file()
+        return s.to_ust_file(use_hanzi)
     
     def to_midi_track(self,use_hanzi:bool=False):
         '''
@@ -240,7 +288,14 @@ class Dvtrack():
         '''
         s=sum(self.segment,Dvsegment(0,0))
         return s.to_midi_track(use_hanzi)
-        
+
+    def to_music21_stream(self,use_hanzi:bool=False):
+        '''
+        将dv区段对象转换为music21 stream，并自动判断调性
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
+        return self.to_ust_file(use_hanzi).to_music21_stream()
+    
 class Dvinst():
     '''
     dv伴奏音轨类
@@ -280,6 +335,10 @@ class Dvfile():
                  beats:list=[(-3,4,4)],
                  track:list=[],
                  inst:list=[]):
+        if(self.track==[]):
+            self.track=[]
+        if(self.inst==[]):
+            self.inst=[]
         self.tempo=tempo
         self.beats=beats
         self.track=track
@@ -291,37 +350,6 @@ class Dvfile():
             s+=str(i)
         return s
         
-    def to_midi_file(self,filename:str="",use_hanzi:bool=False):
-        '''
-        将dv文件对象转换为mid文件与mido.MidiFile对象
-        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
-        '''
-        mid = MidiFile()
-        ctrltrack=MidiTrack()
-        ctrltrack.append(MetaMessage('track_name',name='Control',time=0))
-        tick=0
-        for i in self.tempo:
-            ctrltrack.append(MetaMessage('set_tempo',tempo=bpm2tempo(i[1]),time=i[0]-tick))
-            tick=i[0]
-        mid.tracks.append(ctrltrack)
-        for i in self.track:
-            mid.tracks.append(i.to_midi_track(use_hanzi))
-        if(filename!=""):
-            mid.save(filename)
-        return mid
-    
-    def to_ust_file(self,use_hanzi:bool=False)->list:
-        '''
-        将dv文件按音轨转换为ust文件对象的列表
-        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
-        '''
-        usts=[]
-        for track in self.track:
-            ust=track.to_ust_file()
-            ust.properties["Tempo"]=self.tempo[0][1]
-            usts+=[ust]
-        return usts
-    
     def pos2tick(self,bar:int,beat:int=1,tick:int=0)->int:
         '''
         根据beats进行时间换算：
@@ -395,6 +423,57 @@ class Dvfile():
         tick=tempos[-1][0]+int((time-t)*8*tempos[-1][1])
         return tick
     
+    def quantize(self,d:int):
+        '''
+        将dv工程按照给定的分度值（四分音符为480）量化。
+        将所有音符的边界四舍五入到d的整数倍，过短的音符将被删除。
+        例如，如果需要量化到八分音符，请使用seg.quantize(240)
+        '''
+        for tr in self.track:
+            tr.quantize(d)
+        return self
+    
+    def to_midi_file(self,filename:str="",use_hanzi:bool=False):
+        '''
+        将dv文件对象转换为mid文件与mido.MidiFile对象
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
+        import mido
+        mid = mido.MidiFile()
+        ctrltrack=mido.MidiTrack()
+        ctrltrack.append(mido.MetaMessage('track_name',name='Control',time=0))
+        tick=0
+        for i in self.tempo:
+            ctrltrack.append(mido.MetaMessage('set_tempo',tempo=bpm2tempo(i[1]),time=i[0]-tick))
+            tick=i[0]
+        mid.tracks.append(ctrltrack)
+        for i in self.track:
+            mid.tracks.append(i.to_midi_track(use_hanzi))
+        if(filename!=""):
+            mid.save(filename)
+        return mid
+    
+    def to_ust_file(self,use_hanzi:bool=False)->list:
+        '''
+        将dv文件按音轨转换为ust文件对象的列表
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
+        usts=[]
+        for track in self.track:
+            ust=track.to_ust_file(use_hanzi)
+            ust.properties["Tempo"]=self.tempo[0][1]
+            usts+=[ust]
+        return usts
+    
+    def to_music21_score(self,use_hanzi:bool=False):
+        import music21
+        sc=music21.stream.Score()
+        for tr in self.track:
+            p=music21.stream.Part(tr.to_music21_stream())
+            p.partName=tr.name
+            sc.append(p)
+        return sc
+    
 def opendv(filename:str):
     '''
     打开sk或dv文件，返回Dvfile对象
@@ -447,7 +526,7 @@ def opendv(filename:str):
                         vibfre=data1[2:2+data1[1]*2].reshape([-1,2])#颤音速度线
                         data1=data1[2+data1[1]*2:]
                         vibp=data1[2:2+data1[1]*2].reshape([-1,2])#渲染出的颤音音高曲线
-                        #以上是未知数据块1
+                        #以上是未知数据块2
                         data2=numpy.fromfile(file,"<i4",skreadint(file)//4)#未知数据块2###
                         file.read(2)
                         file.read(16)#音素
@@ -469,7 +548,6 @@ def opendv(filename:str):
                     skreadbytes(file)
                     skreadbytes(file)
                     skreadbytes(file)
-                    #TODO
                     segment+=[Dvsegment(segstart,seglength,segname,vbname,note)]
                 track+=[Dvtrack(trackname,segment,volume,mute,solo)]
             else:
@@ -482,6 +560,20 @@ def opendv(filename:str):
                 skreadint(file)
                 segstart=skreadint(file)
                 seglength=skreadint(file)
+                skreadstr(file)
                 fname=skreadstr(file)
                 inst+=[Dvinst(segstart,fname,trackname,volume,mute,solo)]
     return Dvfile(tempo=tempo,beats=beats,track=track,inst=inst)
+
+def main():
+    d=opendv(r'C:/Users/lin/Desktop/1.dv')
+    d.quantize(60)
+    for t in d.track:
+        t.segment[0].cut()
+        t.segment[0].note=[i for i in t.segment[0].note if i.hanzi!="0"]
+    s=str(d)
+    sc=d.to_music21_score()
+    sc.show()
+
+if(__name__=="__main__"):
+    main()
