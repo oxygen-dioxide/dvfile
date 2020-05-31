@@ -15,7 +15,7 @@
 #### 功能
 
 - 解析dv文件
-- 导出nn文件
+- 导出ust文件
 - 导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
 - 导出musicxml(需要[music21](http://web.mit.edu/music21/doc/index.html))
 - 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)和[musescore](musescore.org)(独立软件)）
