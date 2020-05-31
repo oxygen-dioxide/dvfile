@@ -4,7 +4,7 @@
 
 解析[deepvocal](https://www.deep-vocal.com/) dv文件的python库。
 
-本python库依赖[numpy](https://numpy.org/) [utaufile](https://gitee.com/oxygendioxide/utaufile) [mido](https://mido.readthedocs.io/en/latest/index.html)
+本python库依赖[numpy](https://numpy.org/) [utaufile](https://gitee.com/oxygendioxide/utaufile)
 
 由于dv文件为二进制文件，且没有官方文档或解析器，本项目无法保证与deepvocal完美兼容，如遇到文件解析错误欢迎在issue中提出。
 
@@ -15,8 +15,12 @@
 #### 功能
 
 - 解析dv文件
-- 导出为ust、midi文件
+- 导出nn文件
+- 导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
+- 导出musicxml(需要[music21](http://web.mit.edu/music21/doc/index.html))
+- 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)和[musescore](musescore.org)(独立软件)）
 - 批量获取歌词
+- 量化（将音符对齐到节拍线）
 
 目前可以解析的内容：
 
