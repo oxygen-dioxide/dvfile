@@ -203,6 +203,11 @@ class Dvsegment():
         return self
     
     def getlyric(self,use_hanzi:bool=False,ignore:set=set()):
+        """
+        获取区段歌词列表
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        ignore：忽略的歌词。例如如果想忽略连音符，则ignore={"-"}
+        """
         lyrics=[]
         if(use_hanzi):
             for n in self.note:
@@ -597,6 +602,10 @@ class Dvfile():
         return usts
     
     def to_music21_score(self,use_hanzi:bool=False):
+        '''
+        将dv文件按音轨转换为music21乐谱对象
+        默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
+        '''
         import music21
         sc=music21.stream.Score()
         for tr in self.track:

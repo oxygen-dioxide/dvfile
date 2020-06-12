@@ -22,7 +22,7 @@ if(len(dvfile.track)>1):
     for (i,t) in enumerate(dvfile.track):
         print("{}\t{}".format(i+1,t.name))
     print("请输入需要制作lrc的音轨序号")
-    x=input()-1
+    x=int(input())-1
     tr=dvfile.track[x]
 else:
     tr=dvfile.track[0]
