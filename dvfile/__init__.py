@@ -16,6 +16,9 @@ def skreadstr(file)->str:
     except UnicodeDecodeError:#如果字符串不能用unicode解码，则返回空字符串
         return ""
 
+def skwritebool(n:bool)->bytes:
+    return bytes([int(n)])
+
 def skwriteint(n:int)->bytes:
     return numpy.array([n]).tobytes()
 
@@ -31,7 +34,7 @@ def skwritearray(ar)->bytes:
 def skwritelist(l:list)->bytes:
     return skwritebytes(skwriteint(len(l))+b"".join([bytes(n) for n in l]))
 
-def intquantize(n,d:int)->int:
+def intquantize(n:int,d:int)->int:
     return int(n/d+0.5)*d
 
 #dv文件
@@ -373,6 +376,7 @@ class Dvtrack():
         '''
         for seg in self.segment:
             seg.cut(head=head,tail=tail)
+        return self
     
     def to_ust_file(self,use_hanzi:bool=False):
         '''
@@ -564,6 +568,7 @@ class Dvfile():
         '''
         for tr in self.track:
             tr.cut(head=head,tail=tail)
+        return self
     
     def to_midi_file(self,filename:str="",use_hanzi:bool=False):
         '''
@@ -722,15 +727,15 @@ def opendv(filename:str):
                 volume=skreadint(file)
                 file.read(4)
                 file.read(4)
-                skreadint(file)
-                segstart=skreadint(file)
-                seglength=skreadint(file)
-                skreadstr(file)
-                fname=skreadstr(file)
-                inst+=[Dvinst(segstart,fname,trackname,volume,mute,solo)]
+                if(skreadint(file)>0):#如果为0，则为空伴奏音轨
+                    segstart=skreadint(file)
+                    seglength=skreadint(file)
+                    skreadstr(file)
+                    fname=skreadstr(file)
+                    inst+=[Dvinst(segstart,fname,trackname,volume,mute,solo)]
     return Dvfile(tempo=tempo,beats=beats,track=track,inst=inst)
 
-
+#dvtb文件
 class Dvtbfile():
     '''
     dvtb文件类
@@ -745,7 +750,7 @@ class Dvtbfile():
     build_which_models：指定生成哪些模型，str
     modelpath：模型路径，str
     outputpath：声库输出路径，str
-    pitch：音高，str
+    pitch：音高列表，[str]
     vbname：声库名称，str
     '''
     def __init__(self,
@@ -760,7 +765,7 @@ class Dvtbfile():
                  build_which_models:str="",
                  modelpath:str="",
                  outputpath:str="",
-                 pitch:str="",
+                 pitch:list=[],
                  vbname:str=""):
         self.symbol=symbol
         self.vowel=vowel
@@ -776,12 +781,31 @@ class Dvtbfile():
         self.pitch=pitch
         self.vbname=vbname
     def __bytes__(self):
-        #TODO
-        pass
+        b=(b'SHARPKEYTOOLBOX\x01\x00\x00\x00\x12\x13\x00\x00\x00\x00\x00\x00'
+           +skwritestr("\r\n".join([",".join(line) for line in self.symbol]))
+           +skwritestr("\r\n".join([",".join(line) for line in self.vowel]))
+           +skwritestr("\r\n".join(self.voicon))
+           +skwritestr("\r\n".join(self.unvcon))
+           +skwritestr("\r\n".join(self.inde))
+           +skwritestr("\r\n".join(self.tail))
+           +skwriteint(len(self.wavpath)))
+        for i in self.wavpath:
+            b+=skwritestr(i)
+        b+=(skwritebool(self.build_all_models)
+            +skwritestr(self.build_which_models)
+            +skwritestr(self.modelpath)
+            +skwritestr(self.outputpath)
+            +skwritestr(",".join(self.pitch))
+            +skwritestr(self.vbname))
+        return b
     
     def save(self,filename:str):
-        #TODO
-        pass
+        '''
+        保存dvtb文件
+        filename:文件名
+        '''
+        with open(filename,mode="wb") as file:
+            file.write(bytes(self))
     
 def opendvtb(filename:str):
     '''
@@ -791,21 +815,19 @@ def opendvtb(filename:str):
         file.read(27)
         #读字典
         symbol=[]
-        for line in skreadstr(file).split("\n"):
+        for line in skreadstr(file).split("\r\n"):
             line=line.split(",")
             if(len(line)==3):
                 symbol.append(tuple(line))
         vowel=[]
-        for line in skreadstr(file).split("\n"):
+        for line in skreadstr(file).split("\r\n"):
             line=line.split(",")
             if(len(line)==2):
                 vowel.append(tuple(line))
-        vowel=skreadstr(file).split("\n")
-        voicon=skreadstr(file).split("\n")
-        unvcon=skreadstr(file).split("\n")
-        inde=skreadstr(file).split("\n")
-        tail=skreadstr(file).split("\n")
-        return symbol,vowel,voicon,unvcon,inde,tail
+        voicon=skreadstr(file).split("\r\n")
+        unvcon=skreadstr(file).split("\r\n")
+        inde=skreadstr(file).split("\r\n")
+        tail=skreadstr(file).split("\r\n")
         #读wav目录
         wavpath=[]
         for i in range(0,skreadint(file)):
@@ -814,7 +836,7 @@ def opendvtb(filename:str):
         build_which_models=skreadstr(file)
         modelpath=skreadstr(file)
         outputpath=skreadstr(file)
-        pitch=skreadstr(file)
+        pitch=skreadstr(file).split(",")
         vbname=skreadstr(file)
     return Dvtbfile(symbol,
                     vowel,
@@ -831,7 +853,7 @@ def opendvtb(filename:str):
                     vbname)
 
 def main():
-    opendvtb(r"E:\Music-----------------\S\我的音源\YF\YF.dvtb")
+    opendv(r"E:\Music-----------------\曲谱\山河令midi by星葵.sk")
     pass
 
 if(__name__=="__main__"):
