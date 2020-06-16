@@ -1,4 +1,4 @@
-__version__='0.0.5'
+__version__='0.0.6'
 
 import copy
 import numpy
@@ -266,6 +266,15 @@ class Dvsegment():
         self.note=note_new
         return self
     
+    def filter(self,func):
+        '''
+        按函数过滤音符
+        输入：函数func，它只接受一个Dvnote类型的输入，且输出为bool
+        func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
+        '''
+        self.note=filter(func,self.note)
+        return self
+
     def to_ust_file(self,use_hanzi:bool=False):
         '''
         将dv区段对象转换为ust文件对象
@@ -378,6 +387,16 @@ class Dvtrack():
             seg.cut(head=head,tail=tail)
         return self
     
+    def filter(self,func):
+        '''
+        按函数过滤音符
+        输入：函数func，它只接受一个Dvnote类型的输入，且输出为bool
+        func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
+        '''
+        for seg in self.segment:
+            seg.filter(func)
+        return self
+
     def to_ust_file(self,use_hanzi:bool=False):
         '''
         将dv音轨对象转换为ust文件对象
@@ -570,6 +589,16 @@ class Dvfile():
             tr.cut(head=head,tail=tail)
         return self
     
+    def filter(self,func):
+        '''
+        按函数过滤音符
+        输入：函数func，它只接受一个Dvnote类型的输入，且输出为bool
+        func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
+        '''
+        for tr in self.track:
+            tr.filter(func)
+        return self
+
     def to_midi_file(self,filename:str="",use_hanzi:bool=False):
         '''
         将dv文件对象转换为mid文件与mido.MidiFile对象
@@ -832,7 +861,7 @@ def opendvtb(filename:str):
         wavpath=[]
         for i in range(0,skreadint(file)):
             wavpath+=[skreadstr(file)]
-        build_all_models=bool(file.read(1)[0])
+        build_all_models=file.read(1)==b'\x01'
         build_which_models=skreadstr(file)
         modelpath=skreadstr(file)
         outputpath=skreadstr(file)
