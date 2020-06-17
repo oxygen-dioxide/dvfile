@@ -266,13 +266,25 @@ class Dvsegment():
         self.note=note_new
         return self
     
-    def filter(self,func):
+    def filter(self,f):
         '''
-        按函数过滤音符
-        输入：函数func，它只接受一个Dvnote类型的输入，且输出为bool
+        按函数过滤区段中的音符
+        输入：函数f，它只接受一个Dvnote类型的输入，且输出为bool
         func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
         '''
-        self.note=filter(func,self.note)
+        self.note=filter(f,self.note)
+        return self
+
+    def filterout(self,s,use_hanzi:bool=False):
+        '''
+        按集合过滤区段中的音符
+        输入：集合/列表/元组/字符串s，若音符歌词属于s，则删除该音符
+        默认使用拼音，如需使用汉字，use_hanzi=True
+        '''
+        if(use_hanzi):
+            self.note=[n for n in self.note if not(n.hanzi in s)]
+        else:
+            self.note=[n for n in self.note if not(n.pinyin in s)]
         return self
 
     def to_ust_file(self,use_hanzi:bool=False):
@@ -387,14 +399,24 @@ class Dvtrack():
             seg.cut(head=head,tail=tail)
         return self
     
-    def filter(self,func):
+    def filter(self,f):
         '''
-        按函数过滤音符
-        输入：函数func，它只接受一个Dvnote类型的输入，且输出为bool
+        按函数过滤音轨中的音符
+        输入：函数f，它只接受一个Dvnote类型的输入，且输出为bool
         func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
         '''
         for seg in self.segment:
-            seg.filter(func)
+            seg.filter(f)
+        return self
+
+    def filterout(self,s,use_hanzi:bool=False):
+        '''
+        按集合过滤音轨中的音符
+        输入：集合/列表/元组/字符串s，若音符歌词属于s，则删除该音符
+        默认使用拼音，如需使用汉字，use_hanzi=True
+        '''
+        for seg in self.segment:
+            seg.filterout(s,use_hanzi)
         return self
 
     def to_ust_file(self,use_hanzi:bool=False):
@@ -591,12 +613,22 @@ class Dvfile():
     
     def filter(self,func):
         '''
-        按函数过滤音符
+        按函数过滤工程中的音符
         输入：函数func，它只接受一个Dvnote类型的输入，且输出为bool
         func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
         '''
         for tr in self.track:
             tr.filter(func)
+        return self
+
+    def filterout(self,s,use_hanzi:bool=False):
+        '''
+        按集合过滤工程中的音符
+        输入：集合/列表/元组/字符串s，若音符歌词属于s，则删除该音符
+        默认使用拼音，如需使用汉字，use_hanzi=True
+        '''
+        for tr in self.track:
+            tr.filterout(s,use_hanzi)
         return self
 
     def to_midi_file(self,filename:str="",use_hanzi:bool=False):
