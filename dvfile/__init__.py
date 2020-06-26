@@ -361,12 +361,12 @@ class Dvtrack():
         return s
     
     def __bytes__(self):
-        b=(b"\x00\x00\x00\x00"
+        b=(b"\x00\x00\x00\x00"#tracktype
            +skwritestr(self.name)
            +bytes([int(self.mute)])
            +bytes([int(self.solo)])
            +skwriteint(self.volume)
-           +b"\x00\x00\x00\x00"
+           +b"\x00\x00\x00\x00"#左右声道平衡
            +skwritelist(self.segment)
            )
         return b
@@ -446,6 +446,7 @@ class Dvinst():
     '''
     dv伴奏音轨类
     start:开始时间
+    length:长度
     filename:文件名
     name:伴奏音轨名
     volume:音量
@@ -454,17 +455,38 @@ class Dvinst():
     '''
     def __init__(self,
                  start:int,
+                 length:int,
                  filename:str="",
                  name:str="",
                  volume:int=30,
                  mute:bool=False,
                  solo:bool=False,
                  ):
+        self.start=start
+        self.length=length
+        self.filename=filename
         self.name=name
         self.volume=volume
         #self.balance=balance
         self.mute=mute
         self.solo=solo
+
+    def __bytes__(self):
+        b=(b"\x01\x00\x00\x00"#tracktype
+        +skwritestr(self.name)
+        +skwritebool(self.mute)
+        +skwritebool(self.solo)
+        +skwriteint(self.volume)
+        +b"\x00\x00\x00\x00"#左右声道平衡
+        +skwritebytes(
+            b"\x01\x00\x00\x00"
+            +skwriteint(self.start)
+            +skwriteint(self.length)
+            +skwritestr(self.name)
+            +skwritestr(self.filename)
+            )
+        )
+        return b
 
 class Dvfile():
     '''
@@ -502,11 +524,9 @@ class Dvfile():
         b=(b'ext1ext2ext3ext4ext5ext6ext7'
            +skwritelist(btempo)
            +skwritelist(bbeats)
-           +skwritelist(self.track)[4:]
+           +skwritelist(self.track+self.inst)[4:]
            )
-        b=(b'SHARPKEY\x05\x00\x00\x00'
-           +skwritebytes(b)
-           )
+        b=b'SHARPKEY\x05\x00\x00\x00'+skwritebytes(b) 
         return b
     
     def save(self,filename:str):
@@ -786,14 +806,14 @@ def opendv(filename:str):
                 mute=(file.read(1)==b'\x01')
                 solo=(file.read(1)==b'\x01')
                 volume=skreadint(file)
-                file.read(4)
-                file.read(4)
+                file.read(4)#左右声道平衡
+                file.read(4)#区段占用空间
                 if(skreadint(file)>0):#如果为0，则为空伴奏音轨
                     segstart=skreadint(file)
                     seglength=skreadint(file)
                     skreadstr(file)
                     fname=skreadstr(file)
-                    inst+=[Dvinst(segstart,fname,trackname,volume,mute,solo)]
+                    inst+=[Dvinst(segstart,seglength,fname,trackname,volume,mute,solo)]
     return Dvfile(tempo=tempo,beats=beats,track=track,inst=inst)
 
 #dvtb文件
@@ -914,7 +934,7 @@ def opendvtb(filename:str):
                     vbname)
 
 def main():
-    opendv(r"E:\Music-----------------\曲谱\山河令midi by星葵.sk")
+    opendv(r"C:\Users\lin\Desktop\1.dv").save(r"C:\Users\lin\Desktop\2.dv")
     pass
 
 if(__name__=="__main__"):
