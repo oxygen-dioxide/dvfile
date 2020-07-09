@@ -2,6 +2,7 @@ __version__='0.0.7'
 
 import copy
 import numpy
+from typing import List,Tuple
 from utaufile import Ustfile,Ustnote
 
 def skreadint(file)->int:
@@ -499,8 +500,8 @@ class Dvfile():
     inst:伴奏音轨列表
     '''
     def __init__(self,
-                 tempo:list=[(0,120.0)],
-                 beats:list=[(-3,4,4)],
+                 tempo:List[Tuple[int,float]]=[(0,120.0)],
+                 beats:List[Tuple[int,int,int]]=[(-3,4,4)],
                  track:list=[],
                  inst:list=[]):
         if(track==[]):
@@ -555,7 +556,7 @@ class Dvfile():
         t+=(beat-1)*1920//beats[i][2]+tick
         return t
     
-    def tick2pos(self,tick:int)->tuple:
+    def tick2pos(self,tick:int)->Tuple[int,int,int]:
         '''
         根据beats进行时间换算：
         输入：从-3小节开始，四分音符为480的时间
@@ -835,18 +836,18 @@ class Dvtbfile():
     vbname：声库名称，str
     '''
     def __init__(self,
-                 symbol:list=[],
-                 vowel:list=[],
-                 voicon:list=[],
-                 unvcon:list=[],
-                 inde:list=[],
-                 tail:list=[],
-                 wavpath:list=[],
+                 symbol:List[Tuple[str,str,str]]=[],
+                 vowel:List[Tuple[str,str]]=[],
+                 voicon:List[str]=[],
+                 unvcon:List[str]=[],
+                 inde:List[str]=[],
+                 tail:List[str]=[],
+                 wavpath:List[str]=[],
                  build_all_models:bool=True,
                  build_which_models:str="",
                  modelpath:str="",
                  outputpath:str="",
-                 pitch:list=[],
+                 pitch:List[str]=[],
                  vbname:str=""):
         self.symbol=symbol
         self.vowel=vowel
@@ -952,12 +953,12 @@ class Dvbank():
                 path:str,
                 vbname:str,
                 version:str,
-                symbol:list=[],
-                vowel:list=[],
-                voicon:list=[],
-                unvcon:list=[],
-                inde:list=[],
-                tail:list=[]):
+                symbol:List[Tuple[str]]=[],
+                vowel:List[Tuple[str,str]]=[],
+                voicon:List[str]=[],
+                unvcon:List[str]=[],
+                inde:List[str]=[],
+                tail:List[str]=[]):
         self.path=path
         self.vbname=vbname
         self.version=version
@@ -1019,9 +1020,6 @@ def openvb(path:str):
                 tail)
 
 def main():
-    import os
-    a=set()
-    print(openvb(r"E:\Music-----------------\S\singers\竖笛"))
     pass
 
 if(__name__=="__main__"):
