@@ -1,4 +1,4 @@
-__version__='0.0.6'
+__version__='0.0.7'
 
 import copy
 import numpy
@@ -861,6 +861,7 @@ class Dvtbfile():
         self.outputpath=outputpath
         self.pitch=pitch
         self.vbname=vbname
+
     def __bytes__(self):
         b=(b'SHARPKEYTOOLBOX\x01\x00\x00\x00\x12\x13\x00\x00\x00\x00\x00\x00'
            +skwritestr("\r\n".join([",".join(line) for line in self.symbol]))
@@ -933,8 +934,94 @@ def opendvtb(filename:str):
                     pitch,
                     vbname)
 
+#dv音源
+class Dvbank():
+    '''
+    dv音源类
+    path：路径
+    vbname：名称
+    version：引擎版本
+    symbol：音节列表，[(音节,辅音,元音)]
+    vowel：元音列表，[(元音,来源)]
+    voicon：浊辅音列表，[str]
+    unvcon：清辅音列表，[str]
+    inde：独立发音列表，[str]
+    tail：尾音列表，[str]
+    '''
+    def __init__(self,
+                path:str,
+                vbname:str,
+                version:str,
+                symbol:list=[],
+                vowel:list=[],
+                voicon:list=[],
+                unvcon:list=[],
+                inde:list=[],
+                tail:list=[]):
+        self.path=path
+        self.vbname=vbname
+        self.version=version
+        self.symbol=symbol
+        self.vowel=vowel
+        self.voicon=voicon
+        self.unvcon=unvcon
+        self.inde=inde
+        self.tail=tail
+    
+def openvb(path:str):
+    '''
+    打开dv音源，返回Dvbank对象
+    目前仅支持引擎版本6.1
+    '''
+    import os
+    import json
+    #读sksd
+    for filename in os.listdir(path):
+        if(filename.endswith(".sksd")):
+            sksdname=os.path.join(path,filename)
+            break
+    with open(sksdname,encoding="utf-8-sig") as sksdfile:
+        sksd=json.load(sksdfile)
+    name=sksd["name"]
+    version=sksd["version"]
+    symbol=None
+    vowel=None
+    voicon=None
+    unvcon=None
+    inde=None
+    tail=None
+    #读SKI
+    with open(os.path.join(path,"SKI"),"rb") as skifile:
+        if(version=="6.1"):
+            #读文件头
+            skifile.read(68)
+            prons=skreadstr(skifile).split("|")
+            symbol=[]
+            for line in prons[0].split(";"):
+                symbol.append(tuple(line.split(",")))
+            voicon=prons[1].split(";")
+            unvcon=prons[2].split(";")
+            vowel=[]
+            for line in prons[3].split(";"):
+                vowel.append(tuple(line.split(",")))
+            inde=prons[4].split(";")
+            tail=prons[5].split(";")
+            skreadstr(skifile)#可能是打包的音阶，但目前不确定
+            skifile.read(56)
+    return Dvbank(os.path.abspath(path),
+                name,
+                version,
+                symbol,
+                vowel,
+                voicon,
+                unvcon,
+                inde,
+                tail)
+
 def main():
-    opendv(r"C:\Users\lin\Desktop\1.dv").save(r"C:\Users\lin\Desktop\2.dv")
+    import os
+    a=set()
+    print(openvb(r"E:\Music-----------------\S\singers\竖笛"))
     pass
 
 if(__name__=="__main__"):

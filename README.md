@@ -1,6 +1,6 @@
 # dvfile-python
 
-![](resources/1.png)
+![](https://gitee.com/oxygendioxide/dvfile/raw/master/resources/1.png)
 （[《奋楫》](https://www.bilibili.com/video/BV1xJ411x754?from=search&seid=2690624188195353743)作曲：格里特/髅髅，作词：冥凰）
 
 #### 介绍

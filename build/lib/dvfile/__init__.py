@@ -1,4 +1,4 @@
-__version__='0.0.5'
+__version__='0.0.6'
 
 import copy
 import numpy
@@ -266,6 +266,27 @@ class Dvsegment():
         self.note=note_new
         return self
     
+    def filter(self,f):
+        '''
+        按函数过滤区段中的音符
+        输入：函数f，它只接受一个Dvnote类型的输入，且输出为bool
+        func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
+        '''
+        self.note=filter(f,self.note)
+        return self
+
+    def filterout(self,s,use_hanzi:bool=False):
+        '''
+        按集合过滤区段中的音符
+        输入：集合/列表/元组/字符串s，若音符歌词属于s，则删除该音符
+        默认使用拼音，如需使用汉字，use_hanzi=True
+        '''
+        if(use_hanzi):
+            self.note=[n for n in self.note if not(n.hanzi in s)]
+        else:
+            self.note=[n for n in self.note if not(n.pinyin in s)]
+        return self
+
     def to_ust_file(self,use_hanzi:bool=False):
         '''
         将dv区段对象转换为ust文件对象
@@ -340,12 +361,12 @@ class Dvtrack():
         return s
     
     def __bytes__(self):
-        b=(b"\x00\x00\x00\x00"
+        b=(b"\x00\x00\x00\x00"#tracktype
            +skwritestr(self.name)
            +bytes([int(self.mute)])
            +bytes([int(self.solo)])
            +skwriteint(self.volume)
-           +b"\x00\x00\x00\x00"
+           +b"\x00\x00\x00\x00"#左右声道平衡
            +skwritelist(self.segment)
            )
         return b
@@ -378,6 +399,26 @@ class Dvtrack():
             seg.cut(head=head,tail=tail)
         return self
     
+    def filter(self,f):
+        '''
+        按函数过滤音轨中的音符
+        输入：函数f，它只接受一个Dvnote类型的输入，且输出为bool
+        func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
+        '''
+        for seg in self.segment:
+            seg.filter(f)
+        return self
+
+    def filterout(self,s,use_hanzi:bool=False):
+        '''
+        按集合过滤音轨中的音符
+        输入：集合/列表/元组/字符串s，若音符歌词属于s，则删除该音符
+        默认使用拼音，如需使用汉字，use_hanzi=True
+        '''
+        for seg in self.segment:
+            seg.filterout(s,use_hanzi)
+        return self
+
     def to_ust_file(self,use_hanzi:bool=False):
         '''
         将dv音轨对象转换为ust文件对象
@@ -405,6 +446,7 @@ class Dvinst():
     '''
     dv伴奏音轨类
     start:开始时间
+    length:长度
     filename:文件名
     name:伴奏音轨名
     volume:音量
@@ -413,17 +455,38 @@ class Dvinst():
     '''
     def __init__(self,
                  start:int,
+                 length:int,
                  filename:str="",
                  name:str="",
                  volume:int=30,
                  mute:bool=False,
                  solo:bool=False,
                  ):
+        self.start=start
+        self.length=length
+        self.filename=filename
         self.name=name
         self.volume=volume
         #self.balance=balance
         self.mute=mute
         self.solo=solo
+
+    def __bytes__(self):
+        b=(b"\x01\x00\x00\x00"#tracktype
+        +skwritestr(self.name)
+        +skwritebool(self.mute)
+        +skwritebool(self.solo)
+        +skwriteint(self.volume)
+        +b"\x00\x00\x00\x00"#左右声道平衡
+        +skwritebytes(
+            b"\x01\x00\x00\x00"
+            +skwriteint(self.start)
+            +skwriteint(self.length)
+            +skwritestr(self.name)
+            +skwritestr(self.filename)
+            )
+        )
+        return b
 
 class Dvfile():
     '''
@@ -461,11 +524,9 @@ class Dvfile():
         b=(b'ext1ext2ext3ext4ext5ext6ext7'
            +skwritelist(btempo)
            +skwritelist(bbeats)
-           +skwritelist(self.track)[4:]
+           +skwritelist(self.track+self.inst)[4:]
            )
-        b=(b'SHARPKEY\x05\x00\x00\x00'
-           +skwritebytes(b)
-           )
+        b=b'SHARPKEY\x05\x00\x00\x00'+skwritebytes(b) 
         return b
     
     def save(self,filename:str):
@@ -570,6 +631,26 @@ class Dvfile():
             tr.cut(head=head,tail=tail)
         return self
     
+    def filter(self,func):
+        '''
+        按函数过滤工程中的音符
+        输入：函数func，它只接受一个Dvnote类型的输入，且输出为bool
+        func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
+        '''
+        for tr in self.track:
+            tr.filter(func)
+        return self
+
+    def filterout(self,s,use_hanzi:bool=False):
+        '''
+        按集合过滤工程中的音符
+        输入：集合/列表/元组/字符串s，若音符歌词属于s，则删除该音符
+        默认使用拼音，如需使用汉字，use_hanzi=True
+        '''
+        for tr in self.track:
+            tr.filterout(s,use_hanzi)
+        return self
+
     def to_midi_file(self,filename:str="",use_hanzi:bool=False):
         '''
         将dv文件对象转换为mid文件与mido.MidiFile对象
@@ -725,14 +806,14 @@ def opendv(filename:str):
                 mute=(file.read(1)==b'\x01')
                 solo=(file.read(1)==b'\x01')
                 volume=skreadint(file)
-                file.read(4)
-                file.read(4)
+                file.read(4)#左右声道平衡
+                file.read(4)#区段占用空间
                 if(skreadint(file)>0):#如果为0，则为空伴奏音轨
                     segstart=skreadint(file)
                     seglength=skreadint(file)
                     skreadstr(file)
                     fname=skreadstr(file)
-                    inst+=[Dvinst(segstart,fname,trackname,volume,mute,solo)]
+                    inst+=[Dvinst(segstart,seglength,fname,trackname,volume,mute,solo)]
     return Dvfile(tempo=tempo,beats=beats,track=track,inst=inst)
 
 #dvtb文件
@@ -832,7 +913,7 @@ def opendvtb(filename:str):
         wavpath=[]
         for i in range(0,skreadint(file)):
             wavpath+=[skreadstr(file)]
-        build_all_models=bool(file.read(1)[0])
+        build_all_models=file.read(1)==b'\x01'
         build_which_models=skreadstr(file)
         modelpath=skreadstr(file)
         outputpath=skreadstr(file)
@@ -853,7 +934,7 @@ def opendvtb(filename:str):
                     vbname)
 
 def main():
-    opendv(r"E:\Music-----------------\曲谱\山河令midi by星葵.sk")
+    opendv(r"C:\Users\lin\Desktop\1.dv").save(r"C:\Users\lin\Desktop\2.dv")
     pass
 
 if(__name__=="__main__"):

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: dvfile
-Version: 0.0.5
+Version: 0.0.6
 Summary: Read deepvocal dv file
 Home-page: https://gitee.com/oxygendioxide/dvfile
 Author: oxygen dioxide
@@ -8,6 +8,9 @@ Author-email: 1463567152@qq.com
 License: Apache
 Description: 
         # dvfile-python
+        
+        ![](resources/1.png)
+        （[《奋楫》](https://www.bilibili.com/video/BV1xJ411x754?from=search&seid=2690624188195353743)作曲：格里特/髅髅，作词：冥凰）
         
         #### 介绍
         
@@ -43,7 +46,7 @@ Description:
         - 导出ust文件
         - 导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
         - 导出musicxml(需要[music21](http://web.mit.edu/music21/doc/index.html))
-        - 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)和[musescore](musescore.org)(独立软件)）
+        - 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)和[musescore](http://musescore.org)(独立软件)）
         - 批量获取歌词
         - 量化（将音符对齐到节拍线）
         - 解析与保存dvtb文件
