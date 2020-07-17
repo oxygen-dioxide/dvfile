@@ -1,4 +1,4 @@
-__version__='0.0.7'
+__version__='0.1.0'
 
 import copy
 import numpy
@@ -138,7 +138,7 @@ class Dvsegment():
     vbname:音源名，str
     note:音符列表
     vol：音量Volume，取值范围[0,256]，numpy.array([[x,y]])
-    pit：音调Pitch，numpy.array([[x,y]])
+    pit：音调Pitch，以音分为单位，转换成midi标准的100倍，-1表示按默认音调，numpy.array([[x,y]])
     bre：气声Breathness，取值范围[0,256]，numpy.array([[x,y]])
     gen：声线（性别）Gender，取值范围[0,256]，numpy.array([[x,y]])
     '''
@@ -147,10 +147,10 @@ class Dvsegment():
                  name:str="",
                  vbname:str="",
                  note:list=[],
-                 vol=numpy.array([[-1,128]]),
-                 pit=numpy.array([[-1,0]]),
-                 bre=numpy.array([[-1,128]]),
-                 gen=numpy.array([[-1,128]])):
+                 vol=None,
+                 pit=None,
+                 bre=None,
+                 gen=None):
         if(note==[]):
             note=[]
         self.start=start
@@ -158,10 +158,22 @@ class Dvsegment():
         self.name=name
         self.vbname=vbname
         self.note=note
-        self.vol=vol
-        self.pit=pit
-        self.bre=bre
-        self.gen=gen
+        if(vol==None):
+            self.vol=numpy.array([[-1,128],[length+1,128]])
+        else:
+            self.vol=vol
+        if(pit==None):
+            self.pit=numpy.array([[-1,-1],[length+1,-1]])
+        else:
+            self.pit=pit
+        if(bre==None):
+            self.bre=numpy.array([[-1,128],[length+1,128]])
+        else:
+            self.bre=bre
+        if(gen==None):
+            self.gen=numpy.array([[-1,128],[length+1,128]])
+        else:
+            self.gen=gen
         
     def __str__(self):
         s="  segment {} {} {} {}\n".format(
@@ -690,6 +702,9 @@ class Dvfile():
         return self
 
     def setvbname(self,vbname:str):
+        '''
+        为工程中的所有区段统一设置音源名
+        '''
         for tr in self.track:
             tr.setvbname(vbname)
         return self
@@ -832,7 +847,7 @@ def opendv(filename:str):
                                       vibp,
                                       crolrc,
                                       crotim)]
-                    #以下是音轨参数
+                    #以下是区段参数
                     #音量Volume，取值范围[0,256]
                     vol=numpy.fromfile(file,"<i4",skreadint(file)//4)[1:].reshape([-1,2])
                     #return numpy.fromfile(file,"<i4",skreadint(file)//4)
