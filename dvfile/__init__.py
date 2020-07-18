@@ -328,17 +328,19 @@ class Dvsegment():
     def to_nn_file(self):
         '''
         将dv区段对象转换为nn文件对象
+        nn文件只支持32分音符（分度值为60），过短的音符将被删除
         '''
         from utaufile import Nnfile,Nnnote
         nnnotes=[]
         for n in self.note:
             start=intquantize(n.start,60)//60
             length=intquantize(n.start+n.length,60)//60-start
-            nnnotes.append(Nnnote(hanzi=n.hanzi,
-                                  pinyin=n.pinyin,
-                                  start=start,
-                                  length=length,
-                                  notenum=n.notenum))
+            if(length>0):
+                nnnotes.append(Nnnote(hanzi=n.hanzi,
+                                    pinyin=n.pinyin,
+                                    start=start,
+                                    length=length,
+                                    notenum=n.notenum))
         return Nnfile(note=nnnotes)
 
     def to_midi_track(self,use_hanzi:bool=False):
@@ -1023,7 +1025,7 @@ class Dvbank():
                 path:str,
                 vbname:str,
                 version:str,
-                symbol:List[Tuple[str]]=[],
+                symbol:List[Tuple[str,str,str]]=[],
                 vowel:List[Tuple[str,str]]=[],
                 voicon:List[str]=[],
                 unvcon:List[str]=[],

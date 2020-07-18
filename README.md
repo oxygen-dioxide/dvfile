@@ -3,19 +3,21 @@
 ![](https://gitee.com/oxygendioxide/dvfile/raw/master/resources/1.png)
 （[《奋楫》](https://www.bilibili.com/video/BV1xJ411x754?from=search&seid=2690624188195353743)作曲：格里特/髅髅，作词：冥凰）
 
-#### 介绍
+## 介绍
 
-解析[deepvocal](https://www.deep-vocal.com/) dv文件的python库。
+操作[deepvocal](https://www.deep-vocal.com/) dv文件的python库。
 
-本python库依赖[numpy](https://numpy.org/) [utaufile](https://gitee.com/oxygendioxide/utaufile)
+本python库依赖[numpy](https://numpy.org/)
 
 由于dv文件为二进制文件，且没有官方文档或解析器，本项目无法保证与deepvocal完美兼容，如遇到文件解析错误欢迎在issue中提出。
 
-#### 安装
+## 安装
 
 > pip install dvfile
 
-#### 功能
+## 功能
+
+### dv文件
 
 - 解析与保存dv文件
     
@@ -34,16 +36,26 @@
     - 音轨属性：双声道平衡
     - 音符属性：音素
 
-- 导出ust文件
+- 导出ust、nn文件（需要[utaufile](https://gitee.com/oxygendioxide/utaufile)）
 - 导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
 - 导出musicxml(需要[music21](http://web.mit.edu/music21/doc/index.html))
 - 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)和[musescore](http://musescore.org)(独立软件)）
 - 批量获取歌词
 - 量化（将音符对齐到节拍线）
+
+### dvtb文件
 - 解析与保存dvtb文件
 
+### dv音源
+- 解析dv音源
 
-#### 示例
+    目前可以解析的内容：
+    
+    - 发音列表：音节列表、元音列表、浊辅音列表、清辅音列表、独立发音列表、尾音列表
+
+    支持的引擎版本：6.1  6.0  5.1  4.02
+
+## 示例
 
 ```py
 import dvfile as df
@@ -57,6 +69,10 @@ d.to_midi_file().save("myproject.mid")
 #每个音轨单独导出ust文件
 for (i,t) in enumerate(d.track):
     t.to_ust_file().save('myproject{}.ust'.format(i))
+
+#每个音轨单独导出nn文件(需要utaufile)
+for (i,t) in enumerate(d.track):
+    t.to_nn_file().save('myproject{}.nn'.format(i))
 
 #导出五线谱(需要music21和musescore)
 d.to_music21_score().show()
@@ -72,16 +88,19 @@ tr.segment=[sum(tr.segment)]
 
 #保存dv文件
 d.save("myproject2.dv")
+
+#打开dvtb文件
+dt=df.opendvtb("myvoicebank.dvtb")
 ```
 
-#### 参与贡献
+## 参与贡献
 
 1.  Fork 本仓库
 2.  新建 Feat_xxx 分支
 3.  提交代码
 4.  新建 Pull Request
 
-#### 相关链接
+## 相关链接
 
 [deepvocal官网](https://www.deep-vocal.com/)
 
