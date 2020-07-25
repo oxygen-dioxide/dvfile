@@ -1,8 +1,8 @@
-__version__='0.0.6'
+__version__='0.1.0'
 
 import copy
 import numpy
-from utaufile import Ustfile,Ustnote
+from typing import List,Tuple
 
 def skreadint(file)->int:
     return numpy.fromfile(file,"<i4",1)[0]
@@ -36,6 +36,11 @@ def skwritelist(l:list)->bytes:
 
 def intquantize(n:int,d:int)->int:
     return int(n/d+0.5)*d
+
+def deleteemptystr(l:List[str]):
+    #空字符串经过split后得到[""]，这里转为[]
+    if(l!=[] and l[-1]==""):
+        l.pop()
 
 #dv文件
 class Dvnote():
@@ -133,7 +138,7 @@ class Dvsegment():
     vbname:音源名，str
     note:音符列表
     vol：音量Volume，取值范围[0,256]，numpy.array([[x,y]])
-    pit：音调Pitch，numpy.array([[x,y]])
+    pit：音调Pitch，以音分为单位，转换成midi标准的100倍，-1表示按默认音调，numpy.array([[x,y]])
     bre：气声Breathness，取值范围[0,256]，numpy.array([[x,y]])
     gen：声线（性别）Gender，取值范围[0,256]，numpy.array([[x,y]])
     '''
@@ -142,10 +147,10 @@ class Dvsegment():
                  name:str="",
                  vbname:str="",
                  note:list=[],
-                 vol=numpy.array([[-1,128]]),
-                 pit=numpy.array([[-1,0]]),
-                 bre=numpy.array([[-1,128]]),
-                 gen=numpy.array([[-1,128]])):
+                 vol=None,
+                 pit=None,
+                 bre=None,
+                 gen=None):
         if(note==[]):
             note=[]
         self.start=start
@@ -153,10 +158,22 @@ class Dvsegment():
         self.name=name
         self.vbname=vbname
         self.note=note
-        self.vol=vol
-        self.pit=pit
-        self.bre=bre
-        self.gen=gen
+        if(vol==None):
+            self.vol=numpy.array([[-1,128],[length+1,128]])
+        else:
+            self.vol=vol
+        if(pit==None):
+            self.pit=numpy.array([[-1,-1],[length+1,-1]])
+        else:
+            self.pit=pit
+        if(bre==None):
+            self.bre=numpy.array([[-1,128],[length+1,128]])
+        else:
+            self.bre=bre
+        if(gen==None):
+            self.gen=numpy.array([[-1,128],[length+1,128]])
+        else:
+            self.gen=gen
         
     def __str__(self):
         s="  segment {} {} {} {}\n".format(
@@ -192,6 +209,8 @@ class Dvsegment():
         #self为上一区段，other为下一区段
         deltatime=other.start-self.start#时间差
         seg=Dvsegment(start=self.start,
+                      name=self.name,
+                      vbname=self.vbname,
                       length=deltatime+other.length,
                       note=copy.deepcopy(self.note))
         notes=copy.deepcopy(other.note)
@@ -292,6 +311,7 @@ class Dvsegment():
         将dv区段对象转换为ust文件对象
         默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
         '''
+        from utaufile import Ustfile,Ustnote
         ust=Ustfile()
         time=0
         for note in self.note:
@@ -305,6 +325,24 @@ class Dvsegment():
             time=note.length+note.start
         return ust
     
+    def to_nn_file(self):
+        '''
+        将dv区段对象转换为nn文件对象
+        nn文件只支持32分音符（分度值为60），过短的音符将被删除
+        '''
+        from utaufile import Nnfile,Nnnote
+        nnnotes=[]
+        for n in self.note:
+            start=intquantize(n.start,60)//60
+            length=intquantize(n.start+n.length,60)//60-start
+            if(length>0):
+                nnnotes.append(Nnnote(hanzi=n.hanzi,
+                                    pinyin=n.pinyin,
+                                    start=start,
+                                    length=length,
+                                    notenum=n.notenum))
+        return Nnfile(note=nnnotes)
+
     def to_midi_track(self,use_hanzi:bool=False):
         '''
         将dv区段对象转换为mido.MidiTrack文件对象
@@ -419,14 +457,28 @@ class Dvtrack():
             seg.filterout(s,use_hanzi)
         return self
 
+    def setvbname(self,vbname:str):
+        """
+        为音轨中的所有区段统一设置音源名
+        """
+        for seg in self.segment:
+            seg.vbname=vbname
+        return self
+
     def to_ust_file(self,use_hanzi:bool=False):
         '''
         将dv音轨对象转换为ust文件对象
         默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
         '''
-        s=sum(self.segment,Dvsegment(0,0))
-        return s.to_ust_file(use_hanzi)
+        return sum(self.segment,Dvsegment(0,0)).to_ust_file(use_hanzi)
     
+    def to_nn_file(self):
+        '''
+        将dv音轨对象转换为nn文件对象
+        '''
+        return sum(self.segment,Dvsegment(0,0)).to_nn_file()
+        pass
+
     def to_midi_track(self,use_hanzi:bool=False):
         '''
         将dv音轨对象转换为mido.MidiTrack文件对象
@@ -499,8 +551,8 @@ class Dvfile():
     inst:伴奏音轨列表
     '''
     def __init__(self,
-                 tempo:list=[(0,120.0)],
-                 beats:list=[(-3,4,4)],
+                 tempo:List[Tuple[int,float]]=[(0,120.0)],
+                 beats:List[Tuple[int,int,int]]=[(-3,4,4)],
                  track:list=[],
                  inst:list=[]):
         if(track==[]):
@@ -555,7 +607,7 @@ class Dvfile():
         t+=(beat-1)*1920//beats[i][2]+tick
         return t
     
-    def tick2pos(self,tick:int)->tuple:
+    def tick2pos(self,tick:int)->Tuple[int,int,int]:
         '''
         根据beats进行时间换算：
         输入：从-3小节开始，四分音符为480的时间
@@ -620,7 +672,7 @@ class Dvfile():
             tr.quantize(d)
         return self
     
-    def cut(head:bool=True,tail:bool=True):
+    def cut(self,head:bool=True,tail:bool=True):
         '''
         对工程中的每个区段，切去开始时间为负数的音符，以及结束时间大于区段长度的音符
         （这些音符在deepvocal编辑器中是无效音符）
@@ -651,6 +703,14 @@ class Dvfile():
             tr.filterout(s,use_hanzi)
         return self
 
+    def setvbname(self,vbname:str):
+        '''
+        为工程中的所有区段统一设置音源名
+        '''
+        for tr in self.track:
+            tr.setvbname(vbname)
+        return self
+
     def to_midi_file(self,filename:str="",use_hanzi:bool=False):
         '''
         将dv文件对象转换为mid文件与mido.MidiFile对象
@@ -677,12 +737,25 @@ class Dvfile():
         默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
         '''
         usts=[]
-        for track in self.track:
-            ust=track.to_ust_file(use_hanzi)
-            ust.properties["Tempo"]=self.tempo[0][1]
+        tempo=self.tempo[0][1]
+        for tr in self.track:
+            ust=tr.to_ust_file(use_hanzi)
+            ust.properties["Tempo"]=tempo
             usts+=[ust]
         return usts
     
+    def to_nn_file(self):
+        '''
+        将dv文件按音轨转换为nn文件对象的列表
+        '''
+        nns=[]
+        tempo=self.tempo[0][1]
+        for tr in self.track:
+            nn=tr.to_nn_file()
+            nn.tempo=tempo
+            nns.append(nn)
+        return nns
+
     def to_music21_score(self,use_hanzi:bool=False):
         '''
         将dv文件按音轨转换为music21乐谱对象
@@ -776,7 +849,7 @@ def opendv(filename:str):
                                       vibp,
                                       crolrc,
                                       crotim)]
-                    #以下是音轨参数
+                    #以下是区段参数
                     #音量Volume，取值范围[0,256]
                     vol=numpy.fromfile(file,"<i4",skreadint(file)//4)[1:].reshape([-1,2])
                     #return numpy.fromfile(file,"<i4",skreadint(file)//4)
@@ -835,18 +908,18 @@ class Dvtbfile():
     vbname：声库名称，str
     '''
     def __init__(self,
-                 symbol:list=[],
-                 vowel:list=[],
-                 voicon:list=[],
-                 unvcon:list=[],
-                 inde:list=[],
-                 tail:list=[],
-                 wavpath:list=[],
+                 symbol:List[Tuple[str,str,str]]=[],
+                 vowel:List[Tuple[str,str]]=[],
+                 voicon:List[str]=[],
+                 unvcon:List[str]=[],
+                 inde:List[str]=[],
+                 tail:List[str]=[],
+                 wavpath:List[str]=[],
                  build_all_models:bool=True,
                  build_which_models:str="",
                  modelpath:str="",
                  outputpath:str="",
-                 pitch:list=[],
+                 pitch:List[str]=[],
                  vbname:str=""):
         self.symbol=symbol
         self.vowel=vowel
@@ -861,6 +934,7 @@ class Dvtbfile():
         self.outputpath=outputpath
         self.pitch=pitch
         self.vbname=vbname
+
     def __bytes__(self):
         b=(b'SHARPKEYTOOLBOX\x01\x00\x00\x00\x12\x13\x00\x00\x00\x00\x00\x00'
            +skwritestr("\r\n".join([",".join(line) for line in self.symbol]))
@@ -933,8 +1007,113 @@ def opendvtb(filename:str):
                     pitch,
                     vbname)
 
+#dv音源
+class Dvbank():
+    '''
+    dv音源类
+    path：路径
+    vbname：名称
+    version：引擎版本
+    symbol：音节列表，[(音节,辅音,元音)]
+    vowel：元音列表，[(元音,来源)]
+    voicon：浊辅音列表，[str]
+    unvcon：清辅音列表，[str]
+    inde：独立发音列表，[str]
+    tail：尾音列表，[str]
+    '''
+    def __init__(self,
+                path:str,
+                vbname:str,
+                version:str,
+                symbol:List[Tuple[str,str,str]]=[],
+                vowel:List[Tuple[str,str]]=[],
+                voicon:List[str]=[],
+                unvcon:List[str]=[],
+                inde:List[str]=[],
+                tail:List[str]=[]):
+        self.path=path
+        self.vbname=vbname
+        self.version=version
+        self.symbol=symbol
+        self.vowel=vowel
+        self.voicon=voicon
+        self.unvcon=unvcon
+        self.inde=inde
+        self.tail=tail
+    
+def openvb(path:str):
+    '''
+    打开dv音源，返回Dvbank对象
+    目前支持引擎版本6.1  6.0  5.1  4.02
+    '''
+    import os
+    import json
+    #读sksd
+    sksdname="voice.sksd"
+    for filename in os.listdir(path):
+        if(filename.endswith(".sksd")):
+            sksdname=os.path.join(path,filename)
+            break
+    with open(sksdname,encoding="utf-8-sig") as sksdfile:
+        sksd=json.load(sksdfile)
+    name=sksd["name"]
+    version=sksd["version"]
+    symbol=[]
+    vowel=[]
+    voicon=[]
+    unvcon=[]
+    inde=[]
+    tail=[]
+    #读SKI
+    with open(os.path.join(path,"SKI"),"rb") as skifile:
+        headlength={"6.1":68,
+                    "6.0":64,
+                    "5.1":56,
+                    "4.02":68}
+        #文件头
+        if(version in headlength):
+            skifile.read(headlength[version])
+            #6大发音列表
+            prons=skreadstr(skifile).split("|")
+            if(version in {"6.0","6.1"}):
+                symbol=[]
+                for line in prons[0].split(";"):
+                    symbol.append(tuple(line.split(",")))
+                voicon=prons[1].split(",")
+                unvcon=prons[2].split(",")
+                vowel=[]
+                for line in prons[3].split(";"):
+                    vowel.append(tuple(line.split(",")))
+                inde=prons[4].split(",")
+                tail=prons[5].split(",")
+            elif(version in ["5.1","4.02"]):
+                symbol=[]
+                for line in prons[0].split(";"):
+                    symbol.append(tuple(line.split(",")))
+                voicon=prons[1].split(",")
+                vowel=[]
+                for line in prons[2].split(";"):
+                    vowel.append(tuple(line.split(",")))
+                unvcon=list(set(i[1] for i in symbol)-set(voicon)-set(i[0] for i in vowel))
+                tail=prons[3].split(",")
+                inde=[]
+            deleteemptystr(tail)
+            deleteemptystr(inde)
+            skreadstr(skifile)#可能是打包的音阶，但目前不确定
+            skifile.read(56)
+    return Dvbank(os.path.abspath(path),
+                name,
+                version,
+                symbol,
+                vowel,
+                voicon,
+                unvcon,
+                inde,
+                tail)
+
 def main():
-    opendv(r"C:\Users\lin\Desktop\1.dv").save(r"C:\Users\lin\Desktop\2.dv")
+    a=openvb(r"E:\Music-----------------\S\singers\yongqi_beta_v0.91")
+    print(a.__dict__)
     pass
 
 if(__name__=="__main__"):

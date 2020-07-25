@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: dvfile
-Version: 0.0.6
+Version: 0.0.3
 Summary: Read deepvocal dv file
 Home-page: https://gitee.com/oxygendioxide/dvfile
 Author: oxygen dioxide
@@ -9,14 +9,11 @@ License: Apache
 Description: 
         # dvfile-python
         
-        ![](resources/1.png)
-        （[《奋楫》](https://www.bilibili.com/video/BV1xJ411x754?from=search&seid=2690624188195353743)作曲：格里特/髅髅，作词：冥凰）
-        
         #### 介绍
         
         解析[deepvocal](https://www.deep-vocal.com/) dv文件的python库。
         
-        本python库依赖[numpy](https://numpy.org/) [utaufile](https://gitee.com/oxygendioxide/utaufile)
+        本python库依赖numpy utaufile mido
         
         由于dv文件为二进制文件，且没有官方文档或解析器，本项目无法保证与deepvocal完美兼容，如遇到文件解析错误欢迎在issue中提出。
         
@@ -26,31 +23,24 @@ Description:
         
         #### 功能
         
-        - 解析与保存dv文件
-            
-            目前可以解析的内容：
-        
-            - 曲速标记：位置、曲速
-            - 节拍标记：位置、每小节拍数、音符分数
-            - 音轨属性：音轨名、音轨音量、独奏、静音
-            - 区段属性：区段名、区段音源名、起点、长度
-            - 音符属性：起点、长度、音高、歌词汉字、歌词拼音、滑音(弯曲深度、弯曲长度、头部滑音长度、尾部滑音长度)、颤音(颤音长度、颤音幅度、颤音速度、渲染出的颤音曲线)
-            - 伴奏音轨：音轨名、音轨音量、独奏、静音、文件名、起点
-            - 区段参数：音量、音调、气声、声线
-        
-            目前不能解析的内容（保存时将还原默认值）：
-        
-            - 音轨属性：双声道平衡
-            - 音符属性：音素
-        
-        - 导出ust文件
-        - 导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
-        - 导出musicxml(需要[music21](http://web.mit.edu/music21/doc/index.html))
-        - 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)和[musescore](http://musescore.org)(独立软件)）
+        - 解析dv文件
+        - 导出为ust、midi文件
         - 批量获取歌词
-        - 量化（将音符对齐到节拍线）
-        - 解析与保存dvtb文件
         
+        目前可以解析的内容：
+        
+        - 曲速标记：位置、曲速
+        - 节拍标记：位置、每小节拍数、音符分数
+        - 音轨属性：音轨名、音轨音量、独奏、静音
+        - 区段属性：区段名、区段音源名、起点、长度
+        - 音符属性：起点、长度、音高、歌词汉字、歌词拼音、滑音(弯曲深度、弯曲长度、头部滑音长度、尾部滑音长度)、颤音(颤音幅度、颤音速度、渲染出的颤音曲线)
+        - 伴奏音轨：音轨名、音轨音量、独奏、静音、文件名、起点
+        
+        目前不能解析的内容：
+        
+        - 音轨属性：双声道平衡
+        - 区段参数：音量、音调、气声、声线
+        - 音符属性：音素、颤音长度
         
         #### 示例
         
@@ -60,15 +50,12 @@ Description:
         #打开dv文件
         d=df.opendv("myproject.dv")
         
-        #导出mid文件(需要mido)
+        #导出为mid文件
         d.to_midi_file().save("myproject.mid")
         
-        #每个音轨单独导出ust文件
+        #每个音轨单独导出为ust文件
         for (i,t) in enumerate(d.track):
             t.to_ust_file().save('myproject{}.ust'.format(i))
-        
-        #导出五线谱(需要music21和musescore)
-        d.to_music21_score().show()
         
         #获取第0音轨第0区段的歌词（拼音与汉字）列表
         tr=d.track[0]
@@ -78,9 +65,6 @@ Description:
         
         #将第0音轨的所有区段合并
         tr.segment=[sum(tr.segment)]
-        
-        #保存dv文件
-        d.save("myproject2.dv")
         ```
         
         #### 参与贡献
@@ -105,5 +89,3 @@ Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Requires-Python: >=3.6.0
 Description-Content-Type: text/markdown
-Provides-Extra: export midi
-Provides-Extra: export sheet

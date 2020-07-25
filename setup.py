@@ -15,16 +15,15 @@ from setuptools import find_packages, setup, Command
 
 # Package meta-data.
 NAME = 'dvfile'
-DESCRIPTION = 'Read and write deepvocal dv file'
+DESCRIPTION = 'Read deepvocal dv file'
 URL = 'https://gitee.com/oxygendioxide/dvfile'
 EMAIL = '1463567152@qq.com'    
 AUTHOR = 'oxygen dioxide'
 REQUIRES_PYTHON = '>=3.5.0' 
-VERSION = '0.1.0'
+VERSION = '0.1.1'
     
-REQUIRED = ["numpy"]    
+REQUIRED = ["numpy","utaufile"]    
 EXTRAS = {
-    "export ust and nn":["utaufile"],
     "export midi":["mido"],
     "export sheet":["music21"]
     }
