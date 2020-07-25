@@ -22,10 +22,11 @@ AUTHOR = 'oxygen dioxide'
 REQUIRES_PYTHON = '>=3.5.0' 
 VERSION = '0.1.1'
     
-REQUIRED = ["numpy","utaufile"]    
+REQUIRED = ["numpy"]    
 EXTRAS = {
     "export midi":["mido"],
-    "export sheet":["music21"]
+    "export sheet":["music21"],
+    "export ust and nn":["utaufile"]
     }
 
 # The rest you shouldn't have to touch too much :)
