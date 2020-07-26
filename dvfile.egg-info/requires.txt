@@ -1,3 +1,10 @@
-mido
 numpy
+
+[export midi]
+mido
+
+[export sheet]
+music21
+
+[export ust and nn]
 utaufile

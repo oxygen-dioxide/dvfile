@@ -1142,7 +1142,7 @@ def openvb(path:str):
                 tail)
 
 def main():
-    opendv(r"C:\Users\lin\Desktop\少女斗牛士.dv").transpose(-2).save(r"C:\Users\lin\Desktop\少女斗牛士2.dv")
+    opendv(r"C:\Users\lin\Desktop\不揽清风不望月.dv").transpose(-2).to_music21_score().show()
     pass
 
 if(__name__=="__main__"):

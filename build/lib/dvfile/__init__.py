@@ -1,4 +1,4 @@
-__version__='0.1.0'
+__version__='0.1.1'
 
 import copy
 import numpy
@@ -13,7 +13,7 @@ def skreadbytes(file)->bytes:
 def skreadstr(file)->str:
     try:
         return str(skreadbytes(file),encoding="utf8")
-    except UnicodeDecodeError:#如果字符串不能用unicode解码，则返回空字符串
+    except UnicodeDecodeError:#如果字符串不能用unicode解码，则返回空字符串，而不会导致程序直接退出
         return ""
 
 def skwritebool(n:bool)->bytes:
@@ -158,19 +158,20 @@ class Dvsegment():
         self.name=name
         self.vbname=vbname
         self.note=note
-        if(vol==None):
+        NoneType=type(None)
+        if(type(vol)==NoneType):
             self.vol=numpy.array([[-1,128],[length+1,128]])
         else:
             self.vol=vol
-        if(pit==None):
+        if(type(pit)==NoneType):
             self.pit=numpy.array([[-1,-1],[length+1,-1]])
         else:
             self.pit=pit
-        if(bre==None):
+        if(type(bre)==NoneType):
             self.bre=numpy.array([[-1,128],[length+1,128]])
         else:
             self.bre=bre
-        if(gen==None):
+        if(type(gen)==NoneType):
             self.gen=numpy.array([[-1,128],[length+1,128]])
         else:
             self.gen=gen
@@ -304,6 +305,17 @@ class Dvsegment():
             self.note=[n for n in self.note if not(n.hanzi in s)]
         else:
             self.note=[n for n in self.note if not(n.pinyin in s)]
+        return self
+
+    def transpose(self,n:int):
+        """
+        对dv区段移调
+        n：移调半音数，向上为正，向下为负。
+        """
+        for note in self.note:
+            note.notenum+=n
+        sgn=(numpy.sign(self.pit[:,1])+1)//2
+        self.pit[:,1]+=sgn*n*100
         return self
 
     def to_ust_file(self,use_hanzi:bool=False):
@@ -463,6 +475,15 @@ class Dvtrack():
         """
         for seg in self.segment:
             seg.vbname=vbname
+        return self
+
+    def transpose(self,n:int):
+        """
+        对dv音轨移调
+        n：移调半音数，向上为正，向下为负。
+        """
+        for seg in self.segment:
+            seg.transpose(n)
         return self
 
     def to_ust_file(self,use_hanzi:bool=False):
@@ -709,6 +730,15 @@ class Dvfile():
         '''
         for tr in self.track:
             tr.setvbname(vbname)
+        return self
+
+    def transpose(self,n:int):
+        """
+        对dv工程移调
+        n：移调半音数，向上为正，向下为负。
+        """
+        for tr in self.track:
+            tr.transpose(n)
         return self
 
     def to_midi_file(self,filename:str="",use_hanzi:bool=False):
@@ -1112,8 +1142,7 @@ def openvb(path:str):
                 tail)
 
 def main():
-    a=openvb(r"E:\Music-----------------\S\singers\yongqi_beta_v0.91")
-    print(a.__dict__)
+    opendv(r"C:\Users\lin\Desktop\少女斗牛士.dv").transpose(-2).save(r"C:\Users\lin\Desktop\少女斗牛士2.dv")
     pass
 
 if(__name__=="__main__"):

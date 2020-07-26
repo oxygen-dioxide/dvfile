@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: dvfile
-Version: 0.0.3
+Version: 0.1.1
 Summary: Read deepvocal dv file
 Home-page: https://gitee.com/oxygendioxide/dvfile
 Author: oxygen dioxide
@@ -13,7 +13,7 @@ Description:
         
         解析[deepvocal](https://www.deep-vocal.com/) dv文件的python库。
         
-        本python库依赖numpy utaufile mido
+        本python库依赖[numpy](https://numpy.org/) [utaufile](https://gitee.com/oxygendioxide/utaufile) [mido](https://mido.readthedocs.io/en/latest/index.html)
         
         由于dv文件为二进制文件，且没有官方文档或解析器，本项目无法保证与deepvocal完美兼容，如遇到文件解析错误欢迎在issue中提出。
         
@@ -87,5 +87,8 @@ Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: Implementation :: CPython
-Requires-Python: >=3.6.0
+Requires-Python: >=3.5.0
 Description-Content-Type: text/markdown
+Provides-Extra: export midi
+Provides-Extra: export sheet
+Provides-Extra: export ust and nn
