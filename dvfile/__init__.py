@@ -57,9 +57,9 @@ class Dvnote():
     portail:尾部滑音长度，int
     timbre：采样音阶，-1表示跟随音高，0表示T1，1表示T2，以此类推，int
     viblen:颤音长度
-    vibamp:颤音幅度曲线
-    vibfre:颤音速度曲线
-    vibp:渲染出的颤音音高曲线，单位：（毫秒，音分），上下颠倒，每10ms采样一次
+    vibamp:颤音幅度曲线，numpy.array([[x,y]])
+    vibfre:颤音速度曲线，numpy.array([[x,y]])
+    vibp:渲染出的颤音音高曲线，numpy.array([[x,y]])，单位：（毫秒，音分），上下颠倒，每10ms采样一次
     crolrc:交叉拼音，str
     crotim:交叉音阶，int
     '''
@@ -385,7 +385,8 @@ class Dvtrack():
     '''
     dv音轨类
     name:音轨名，str
-    volume:音量，int
+    volume:音量，int,[0,100]
+    balance:左右声道平衡，int,[-50,50]
     mute:静音，bool
     solo:独奏，bool
     segment:区段列表
@@ -393,13 +394,14 @@ class Dvtrack():
     def __init__(self,name:str="",
                  segment:list=[],
                  volume:int=30,
+                 balance:int=0,
                  mute:bool=False,
                  solo:bool=False):
         if(segment==[]):
             segment=[]
         self.name=name
         self.volume=volume
-        #self.balance=balance
+        self.balance=balance
         self.mute=mute
         self.solo=solo
         self.segment=segment
@@ -411,12 +413,13 @@ class Dvtrack():
         return s
     
     def __bytes__(self):
+        from dvfile.data import balancewrite
         b=(b"\x00\x00\x00\x00"#tracktype
            +skwritestr(self.name)
            +bytes([int(self.mute)])
            +bytes([int(self.solo)])
            +skwriteint(self.volume)
-           +b"\x00\x00\x00\x00"#左右声道平衡
+           +balancewrite.get(self.balance,b"\0\0\0\0")
            +skwritelist(self.segment)
            )
         return b
@@ -788,21 +791,37 @@ class Dvfile():
 
     def to_music21_score(self,use_hanzi:bool=False):
         '''
-        将dv文件按音轨转换为music21乐谱对象
+        将dv文件按音轨转换为music21乐谱对象，并自动判断调性
         默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
         '''
         import music21
         sc=music21.stream.Score()
+        #音轨
+        starttime=self.pos2tick(1)
         for tr in self.track:
-            p=music21.stream.Part(tr.to_music21_stream(use_hanzi=use_hanzi))
+            u=sum(tr.segment,Dvsegment(start=starttime,length=0)).to_ust_file(use_hanzi=use_hanzi)
+            u.properties["Tempo"]=0
+            p=music21.stream.Part(u.to_music21_stream())
             p.partName=tr.name
             sc.append(p)
+        #节拍
+        beats=self.beats[0]
+        ts=music21.meter.TimeSignature()
+        ts.numerator=beats[1]
+        ts.denominator=beats[2]
+        for p in sc.parts:
+            p.insert(0,ts)
+        #曲速
+        mm = music21.tempo.MetronomeMark(number=self.tempo[0][1])
+        for p in sc.parts:
+            p.insert(0,mm)
         return sc
     
 def opendv(filename:str):
     '''
     打开sk或dv文件，返回Dvfile对象
     '''
+    from dvfile.data import balanceread
     with open(filename,"rb") as file:
         #文件头
         file.read(48)
@@ -817,27 +836,24 @@ def opendv(filename:str):
             beats+=[tuple(numpy.fromfile(file,"<i4",3))]
         track=[]
         inst=[]
-        for i in range(0,skreadint(file)):
-            #读音轨
+        for i in range(0,skreadint(file)):#读音轨
             tracktype=skreadint(file)#合成音轨0，伴奏1
-            if(tracktype==0):
+            if(tracktype==0):#合成音轨
                 trackname=skreadstr(file)
                 mute=(file.read(1)==b'\x01')
                 solo=(file.read(1)==b'\x01')
                 volume=skreadint(file)
-                file.read(4)#左右声道平衡
+                balance=balanceread.get(file.read(4),0)#左右声道平衡
                 file.read(4)#区段占用空间
                 segment=[]
-                for i in range(0,skreadint(file)):
-                    #读区段
+                for i in range(0,skreadint(file)):#读区段
                     segstart=skreadint(file)
                     seglength=skreadint(file)
                     segname=skreadstr(file)
                     vbname=skreadstr(file)
                     file.read(4)#音符占用空间
                     note=[]
-                    for i in range(0,skreadint(file)):
-                        #读音符
+                    for i in range(0,skreadint(file)):#读音符
                         start=skreadint(file)
                         length=skreadint(file)
                         notenum=115-skreadint(file)
@@ -903,8 +919,8 @@ def opendv(filename:str):
                                         pit=pit,
                                         bre=bre,
                                         gen=gen)]
-                track+=[Dvtrack(trackname,segment,volume,mute,solo)]
-            else:
+                track+=[Dvtrack(trackname,segment,volume,balance,mute,solo)]
+            else:#伴奏音轨
                 trackname=skreadstr(file)
                 mute=(file.read(1)==b'\x01')
                 solo=(file.read(1)==b'\x01')
@@ -1142,8 +1158,8 @@ def openvb(path:str):
                 tail)
 
 def main():
-    opendv(r"C:\Users\lin\Desktop\不揽清风不望月.dv").transpose(-2).to_music21_score().show()
-    pass
-
+    d=opendv(r"C:\Users\lin\Desktop\吹灭小山河.dv")
+    d.to_music21_score(use_hanzi=True).show()
+  
 if(__name__=="__main__"):
     main()
