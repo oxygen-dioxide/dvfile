@@ -38,8 +38,8 @@
 
 - 导出ust、nn文件（需要[utaufile](https://gitee.com/oxygendioxide/utaufile)）
 - 导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
-- 导出musicxml(需要[music21](http://web.mit.edu/music21/doc/index.html))
-- 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)和[musescore](http://musescore.org)(独立软件)）
+- 导出musicxml(需要[music21](http://web.mit.edu/music21/doc/index.html)、[utaufile](https://gitee.com/oxygendioxide/utaufile))
+- 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)、[utaufile](https://gitee.com/oxygendioxide/utaufile)和[musescore](http://musescore.org)(独立软件)）
 - 批量获取歌词
 - 量化（将音符对齐到节拍线）
 - 移调（音符与pit批量上下移动）

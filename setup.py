@@ -15,7 +15,7 @@ from setuptools import find_packages, setup, Command
 
 # Package meta-data.
 NAME = 'dvfile'
-DESCRIPTION = 'Read deepvocal dv file'
+DESCRIPTION = 'Read and write deepvocal dv file'
 URL = 'https://gitee.com/oxygendioxide/dvfile'
 EMAIL = '1463567152@qq.com'    
 AUTHOR = 'oxygen dioxide'
@@ -25,7 +25,7 @@ VERSION = '0.1.1'
 REQUIRED = ["numpy"]    
 EXTRAS = {
     "export midi":["mido"],
-    "export sheet":["music21"],
+    "export sheet":["music21","utaufile"],
     "export ust and nn":["utaufile"]
     }
 
@@ -111,14 +111,19 @@ setup(
     install_requires=REQUIRED,
     extras_require=EXTRAS,
     include_package_data=True,
-    license='Apache',
+    license='Mulan',
     classifiers=[
         # Trove classifiers
         # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
-        'License :: OSI Approved :: Apache Software License',
+        'License :: Other/Proprietary License',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.5',
+        'Topic :: Multimedia :: Sound/Audio :: MIDI',
+        "Topic :: Multimedia :: Sound/Audio :: Sound Synthesis",
         'Programming Language :: Python :: Implementation :: CPython'
     ],
     # $ setup.py publish support.
