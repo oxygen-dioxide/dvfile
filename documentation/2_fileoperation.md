@@ -12,6 +12,8 @@
 <class 'dvfile.Dvfile'>
 ```
 可以用print打印出来以便快速查看。
+
+注意：dvfile库中各种对象，print输出的内容在后续版本的dvfile中随时可能调整与优化，应仅用于命令行交互与程序调试，不建议解析字符串后继续利用数据。
 ```py
 >>> print(d)
 [(0, 174.0)]
@@ -42,17 +44,22 @@ dv文件对象可以用save方法保存为dv文件
 ```
 
 ## 文件格式转换
-dv文件对象可以导出mid、ust、nn文件
+dv文件对象可以导出ust、nn、mid文件
 ```py
 >>> d.to_ust_file().save("zhiyaopingfan.ust")#导出ust（需要utaufile）
 >>> d.to_nn_file().save("zhiyaopingfan.nn")#导出nn（需要utaufile）
 >>> d.to_midi_file().save("zhiyaopingfan.mid")#导出mid（需要mido）
 ```
+dvfile在导出文件时，如果目标文件不支持汉字拼音双重歌词（ust、mid、music21），则默认使用拼音歌词以保证大多数引擎的兼容性。如果需要导出汉字歌词，请使用use_hanzi=True参数
+```py
+d.to_midi_file(use_hanzi=True).save("zhiyaopingfan.mid")
+```
+
 
 ## 导出五线谱
 安装music1 musescore，并按照上一章的方法配置好环境后，可以导出五线谱
 ```py
 >>> d.to_music21_score(use_hanzi=True).show()
 ```
-由于music21库很大，这行代码需要等待几秒钟，之后会打开musescore窗口并显示五线谱。
+由于music21库很大，这行代码需要等待几秒钟，然后会打开musescore窗口并显示五线谱，可以导出为图片或pdf文件。
 ![](Resource/2020-08-11-19-58-16.png)

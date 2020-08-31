@@ -1,11 +1,13 @@
-__version__='0.1.1'
+__version__='0.1.2'
 
 import copy
+import math
 import numpy
+import struct
 from typing import List,Tuple
 
 def skreadint(file)->int:
-    return numpy.fromfile(file,"<i4",1)[0]
+    return struct.unpack("l",file.read(4))[0]
 
 def skreadbytes(file)->bytes:
     return file.read(skreadint(file))
@@ -20,7 +22,7 @@ def skwritebool(n:bool)->bytes:
     return bytes([int(n)])
 
 def skwriteint(n:int)->bytes:
-    return numpy.array([n]).tobytes()
+    return struct.pack("l",n)
 
 def skwritebytes(s:bytes)->bytes:
     return skwriteint(len(s))+s
@@ -35,6 +37,7 @@ def skwritelist(l:list)->bytes:
     return skwritebytes(skwriteint(len(l))+b"".join([bytes(n) for n in l]))
 
 def intquantize(n:int,d:int)->int:
+    #将n四舍五入到d的整数倍
     return int(n/d+0.5)*d
 
 def deleteemptystr(l:List[str]):
@@ -59,7 +62,7 @@ class Dvnote():
     viblen:颤音长度
     vibamp:颤音幅度曲线，numpy.array([[x,y]])
     vibfre:颤音速度曲线，numpy.array([[x,y]])
-    vibp:渲染出的颤音音高曲线，numpy.array([[x,y]])，单位：（毫秒，音分），上下颠倒，每10ms采样一次
+    vibp:渲染出的颤音音高曲线，numpy.array([[x,y]])，单位：（毫秒，音分），每10ms采样一次
     crolrc:交叉拼音，str
     crotim:交叉音阶，int
     '''
@@ -74,9 +77,9 @@ class Dvnote():
                  portail:int=20,
                  timbre:int=-1,
                  viblen:int=0,
-                 vibamp=numpy.array([[-1,0],[100001,0]]),
-                 vibfre=numpy.array([[-1,0],[100001,0]]),
-                 vibp=numpy.array([[0,0]]),
+                 vibamp:numpy.array=numpy.array([[-1,0],[100001,0]]),
+                 vibfre:numpy.array=numpy.array([[-1,0],[100001,0]]),
+                 vibp:numpy.array=numpy.array([[0,0]]),
                  crolrc:str="",
                  crotim:int=-1):
         self.start=start
@@ -120,10 +123,10 @@ class Dvnote():
                         +skwritearray(v))
            +data2
            +b'\x00\x00\x00\x80?\x00\x00\x00\x80?\x00\x00\x80?\x00\x00\x80?'#音素
-           +skwriteint(self.benlen)
            +skwriteint(self.bendep)
-           +skwriteint(self.porhead)
+           +skwriteint(self.benlen)
            +skwriteint(self.portail)
+           +skwriteint(self.porhead)
            +skwriteint(self.timbre)
            +skwritestr(self.crolrc)
            +skwriteint(self.crotim))
@@ -146,18 +149,18 @@ class Dvsegment():
                  length:int,
                  name:str="",
                  vbname:str="",
-                 note:list=[],
-                 vol=None,
-                 pit=None,
-                 bre=None,
-                 gen=None):
+                 note:List[Dvnote]=[],
+                 vol:numpy.array=None,
+                 pit:numpy.array=None,
+                 bre:numpy.array=None,
+                 gen:numpy.array=None):
         if(note==[]):
             note=[]
-        self.start=start
-        self.length=length
-        self.name=name
-        self.vbname=vbname
-        self.note=note
+        self.start:int=start
+        self.length:int=length
+        self.name:str=name
+        self.vbname:str=vbname
+        self.note:List[Dvnote]=note
         NoneType=type(None)
         if(type(vol)==NoneType):
             self.vol=numpy.array([[-1,128],[length+1,128]])
@@ -224,6 +227,21 @@ class Dvsegment():
         #为适配sum，规定：其他类型+Dvsegment返回原Dvsegment
         return self
     
+    def setstart(self,start:int):
+        """
+        修改音轨起点而不改变音符和参数的绝对位置
+        """
+        delta=start-self.start
+        self.start=start
+        #音符移动
+        for note in self.note:
+            note.start-=delta
+        #参数移动
+        for param in (self.pit,self.vol,self.bre,self.gen):
+            param[:,0]-=delta
+        #TODO
+        return self
+
     def getlyric(self,use_hanzi:bool=False,ignore:set=set()):
         '''
         获取区段歌词列表
@@ -271,7 +289,7 @@ class Dvsegment():
     
     def quantize(self,d:int):
         '''
-        将dv区段按照给定的分度值（四分音符为480）量化。
+        将dv区段按照给定的分度值d（四分音符为480）量化。
         将所有音符的边界四舍五入到d的整数倍，过短的音符将被删除。
         例如，如果需要量化到八分音符，请使用seg.quantize(240)
         '''
@@ -292,7 +310,7 @@ class Dvsegment():
         输入：函数f，它只接受一个Dvnote类型的输入，且输出为bool
         func将在所有音符上作用一遍，保留返回True的那些音符，其他音符将被删除
         '''
-        self.note=filter(f,self.note)
+        self.note=list(filter(f,self.note))
         return self
 
     def filterout(self,s,use_hanzi:bool=False):
@@ -317,6 +335,70 @@ class Dvsegment():
         sgn=(numpy.sign(self.pit[:,1])+1)//2
         self.pit[:,1]+=sgn*n*100
         return self
+
+    def basicpitch(self,tempolist:List[Tuple[int,float]]):
+        """
+        计算音轨的基础音高曲线
+        """
+        #暂不支持变速曲
+        tempo=tempolist[0][1]
+        tps=8*tempo
+        bp=numpy.zeros(self.length)
+        #有音符部分的基本音高
+        for n in self.note:
+            bp[n.start:n.start+n.length]=100*n.notenum
+        #开头、结尾
+        bp[0:self.note[0].start]=100*self.note[0].notenum
+        bp[self.note[-1].start:]=100*self.note[-1].notenum
+        #滑音
+        #dv滑音机制：
+        #0~100，80为0.25s，最大不超过音符长度一半
+        def por(deltax,y1,y2):
+            ls=numpy.linspace(-math.pi/2,math.pi/2,num=deltax,endpoint=False)
+            p=((y1+y2)/2+(y2-y1)/2*numpy.sin(ls))
+            return p
+        
+        for i in range(len(self.note)-1):
+            lastnote=self.note[i]
+            nextnote=self.note[i+1]
+            porstart=lastnote.start+lastnote.length-min((lastnote.length//2,int(0.025*lastnote.portail*tempo)))
+            porend=nextnote.start+min((nextnote.length//2,int(0.025*nextnote.porhead*tempo)))
+            bp[porstart:porend]=por(porend-porstart,lastnote.notenum*100,nextnote.notenum*100).astype(numpy.int)
+        #弯音
+        #dv弯音机制：
+        #弯曲段长度受benlen控制，benlen<50时，长度为0.375s。benlen>50时，长度线性变化。benlen=100时，长度为0.6875s
+        #前段为直线，从(0,0)到(x,-y)其中x=0.09375s，不超过音符长度一半，
+        #y=bendep*0.03
+        #后段为正弦曲线
+        def ben(length,benlen,bendep):
+            x1=min((length//2,int(0.09375*tps)))
+            if(benlen<=50):
+                x2=int(0.375*tps)
+            else:
+                x2=int((0.0625+benlen*0.006875)*tps)
+            x2=min((length,x2))
+            b=numpy.zeros(length)
+            b[0:x1]=numpy.linspace(0,-1,num=x1,endpoint=False)
+            b[x1:x2]=por(x2-x1,-1,0)
+            b=b*3*bendep
+            return b
+        for n in self.note:
+            bp[n.start:n.start+n.length]+=ben(n.length,n.benlen,n.bendep).astype(numpy.int)
+        #颤音
+        for n in self.note:
+            vib=numpy.interp(numpy.linspace(0,n.length-1,num=n.length),n.vibp[:,0]/1000.0*tps,n.vibp[:,1],left=0,right=0)
+            bp[n.start:n.start+n.length]+=vib.astype(numpy.int)
+        return bp
+
+    def pitch(self,tempolist:List[Tuple[int,float]]):
+        """
+        计算音轨的音高曲线（包括基础音高曲线和编辑过的曲线部分）
+        """
+        p=self.basicpitch(tempolist)#基础音高曲线
+        dp=numpy.interp(numpy.linspace(0,self.length-1,num=self.length),self.pit[:,0],self.pit[:,1],left=-1,right=-1)#编辑过的曲线部分
+        sgn=(numpy.sign(dp)+1)//2
+        return sgn*dp+(1-sgn)*p
+        #TODO
 
     def to_ust_file(self,use_hanzi:bool=False):
         '''
@@ -357,7 +439,7 @@ class Dvsegment():
 
     def to_midi_track(self,use_hanzi:bool=False):
         '''
-        将dv区段对象转换为mido.MidiTrack文件对象
+        将dv区段对象转换为mido.MidiTrack对象
         默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
         '''
         import mido
@@ -381,6 +463,25 @@ class Dvsegment():
         '''
         return self.to_ust_file(use_hanzi).to_music21_stream()
     
+    def to_iftp_track(self,use_hanzi:bool=False,beat:int=4):
+        import iftpy
+        iftpnotes=[]
+        barlen=480*beat
+        if(use_hanzi):
+            for n in self.note:
+                iftpnotes.append(iftpy.Iftpnote(start=n.start/barlen,
+                                                end=(n.start+n.length)/barlen,
+                                                notenum=n.notenum,
+                                                lyric=n.hanzi))
+        else:
+            for n in self.note:
+                iftpnotes.append(iftpy.Iftpnote(start=n.start/barlen,
+                                                end=(n.start+n.length)/barlen,
+                                                notenum=n.notenum,
+                                                lyric=n.pinyin))
+        return iftpy.Iftptrack(note=iftpnotes,beat=beat,name=self.name)
+        #TODO
+
 class Dvtrack():
     '''
     dv音轨类
@@ -392,19 +493,19 @@ class Dvtrack():
     segment:区段列表
     '''
     def __init__(self,name:str="",
-                 segment:list=[],
+                 segment:List[Dvsegment]=[],
                  volume:int=30,
                  balance:int=0,
                  mute:bool=False,
                  solo:bool=False):
         if(segment==[]):
             segment=[]
-        self.name=name
-        self.volume=volume
-        self.balance=balance
-        self.mute=mute
-        self.solo=solo
-        self.segment=segment
+        self.name:str=name
+        self.volume:int=volume
+        self.balance:int=balance
+        self.mute:bool=mute
+        self.solo:bool=solo
+        self.segment:List[Dvsegment]=segment
         
     def __str__(self):
         s=" track {}\n".format(self.name)
@@ -426,7 +527,7 @@ class Dvtrack():
     
     def quantize(self,d:int):
         '''
-        将dv音轨按照给定的分度值（四分音符为480）量化。
+        将dv音轨按照给定的分度值d（四分音符为480）量化。
         将所有音符的边界四舍五入到d的整数倍，过短的音符将被删除。
         例如，如果需要量化到八分音符，请使用tr.quantize(240)
         '''
@@ -518,6 +619,12 @@ class Dvtrack():
         '''
         return self.to_ust_file(use_hanzi).to_music21_stream()
     
+    def to_iftp_track(self,use_hanzi:bool=False,beat:int=4):
+        seg=sum(self.segment,Dvsegment(0,0))
+        seg.name=self.name
+        return seg.to_iftp_track(use_hanzi=use_hanzi,beat=beat)
+        #TODO
+
 class Dvinst():
     '''
     dv伴奏音轨类
@@ -538,14 +645,14 @@ class Dvinst():
                  mute:bool=False,
                  solo:bool=False,
                  ):
-        self.start=start
-        self.length=length
-        self.filename=filename
-        self.name=name
-        self.volume=volume
+        self.start:int=start
+        self.length:int=length
+        self.filename:str=filename
+        self.name:str=name
+        self.volume:int=volume
         #self.balance=balance
-        self.mute=mute
-        self.solo=solo
+        self.mute:bool=mute
+        self.solo:bool=solo
 
     def __bytes__(self):
         b=(b"\x01\x00\x00\x00"#tracktype
@@ -577,16 +684,16 @@ class Dvfile():
     def __init__(self,
                  tempo:List[Tuple[int,float]]=[(0,120.0)],
                  beats:List[Tuple[int,int,int]]=[(-3,4,4)],
-                 track:list=[],
-                 inst:list=[]):
+                 track:List[Dvtrack]=[],
+                 inst:List[Dvinst]=[]):
         if(track==[]):
             track=[]
         if(inst==[]):
             inst=[]
-        self.tempo=tempo
-        self.beats=beats
-        self.track=track
-        self.inst=inst
+        self.tempo:List[Tuple[int,float]]=tempo
+        self.beats:List[Tuple[int,int,int]]=beats
+        self.track:List[Dvtrack]=track
+        self.inst:List[Dvinst]=inst
         
     def __str__(self):
         s="{}\n{}\n".format(self.tempo,self.beats)
@@ -600,7 +707,7 @@ class Dvfile():
         b=(b'ext1ext2ext3ext4ext5ext6ext7'
            +skwritelist(btempo)
            +skwritelist(bbeats)
-           +skwritelist(self.track+self.inst)[4:]
+           +skwritelist([]+self.track+self.inst)[4:]
            )
         b=b'SHARPKEY\x05\x00\x00\x00'+skwritebytes(b) 
         return b
@@ -688,7 +795,7 @@ class Dvfile():
     
     def quantize(self,d:int):
         '''
-        将dv工程按照给定的分度值（四分音符为480）量化。
+        将dv工程按照给定的分度值d（四分音符为480）量化。
         将所有音符的边界四舍五入到d的整数倍，过短的音符将被删除。
         例如，如果需要量化到八分音符，请使用seg.quantize(240)
         '''
@@ -751,6 +858,7 @@ class Dvfile():
         '''
         import mido
         mid = mido.MidiFile()
+        #控制轨
         ctrltrack=mido.MidiTrack()
         ctrltrack.append(mido.MetaMessage('track_name',name='Control',time=0))
         tick=0
@@ -773,7 +881,7 @@ class Dvfile():
         tempo=self.tempo[0][1]
         for tr in self.track:
             ust=tr.to_ust_file(use_hanzi)
-            ust.properties["Tempo"]=tempo
+            ust.tempo=tempo
             usts+=[ust]
         return usts
     
@@ -800,15 +908,15 @@ class Dvfile():
         starttime=self.pos2tick(1)
         for tr in self.track:
             u=sum(tr.segment,Dvsegment(start=starttime,length=0)).to_ust_file(use_hanzi=use_hanzi)
-            u.properties["Tempo"]=0
+            u.tempo=0#阻止Ustfile将曲速写入music21对象，交由dvfile来写
             p=music21.stream.Part(u.to_music21_stream())
             p.partName=tr.name
             sc.append(p)
         #节拍
         beats=self.beats[0]
         ts=music21.meter.TimeSignature()
-        ts.numerator=beats[1]
-        ts.denominator=beats[2]
+        ts.numerator=beats[1]#每小节拍数
+        ts.denominator=beats[2]#音符分数
         for p in sc.parts:
             p.insert(0,ts)
         #曲速
@@ -817,6 +925,16 @@ class Dvfile():
             p.insert(0,mm)
         return sc
     
+    def to_iftp_file(self,use_hanzi:bool=False):
+        import iftpy
+        iftptracks=[]
+        tempo=self.tempo[0][1]
+        beat=self.beats[0][1]
+        for tr in self.track:
+            iftptracks.append(tr.to_iftp_track(use_hanzi=use_hanzi,beat=beat))
+        return iftpy.Iftpfile(track=iftptracks,beat=beat).settempo(tempo)
+        #TODO
+
 def opendv(filename:str):
     '''
     打开sk或dv文件，返回Dvfile对象
@@ -833,7 +951,7 @@ def opendv(filename:str):
         #读节拍标记
         beats=[]
         for i in range(0,skreadint(file)):
-            beats+=[tuple(numpy.fromfile(file,"<i4",3))]
+            beats+=[(skreadint(file),skreadint(file),skreadint(file))]
         track=[]
         inst=[]
         for i in range(0,skreadint(file)):#读音轨
@@ -872,10 +990,10 @@ def opendv(filename:str):
                         #以上是未知数据块1
                         data2=skreadbytes(file)#未知数据块2
                         file.read(18)#音素
-                        benlen=skreadint(file)#弯曲长度
                         bendep=skreadint(file)#弯曲深度
-                        porhead=skreadint(file)#头部滑音长度
+                        benlen=skreadint(file)#弯曲长度
                         portail=skreadint(file)#尾部滑音长度
+                        porhead=skreadint(file)#头部滑音长度
                         timbre=skreadint(file)#音阶
                         crolrc=skreadstr(file)#交叉拼音
                         crotim=skreadint(file)#交叉音阶
@@ -967,19 +1085,19 @@ class Dvtbfile():
                  outputpath:str="",
                  pitch:List[str]=[],
                  vbname:str=""):
-        self.symbol=symbol
-        self.vowel=vowel
-        self.voicon=voicon
-        self.unvcon=unvcon
-        self.inde=inde
-        self.tail=tail
-        self.wavpath=wavpath
-        self.build_all_models=build_all_models
-        self.build_which_models=build_which_models
-        self.modelpath=modelpath
-        self.outputpath=outputpath
-        self.pitch=pitch
-        self.vbname=vbname
+        self.symbol:List[Tuple[str,str,str]]=symbol
+        self.vowel:List[Tuple[str,str]]=vowel
+        self.voicon:List[str]=voicon
+        self.unvcon:List[str]=unvcon
+        self.inde:List[str]=inde
+        self.tail:List[str]=tail
+        self.wavpath:List[str]=wavpath
+        self.build_all_models:bool=build_all_models
+        self.build_which_models:str=build_which_models
+        self.modelpath:str=modelpath
+        self.outputpath:str=outputpath
+        self.pitch:List[str]=pitch
+        self.vbname:str=vbname
 
     def __bytes__(self):
         b=(b'SHARPKEYTOOLBOX\x01\x00\x00\x00\x12\x13\x00\x00\x00\x00\x00\x00'
@@ -1076,16 +1194,20 @@ class Dvbank():
                 voicon:List[str]=[],
                 unvcon:List[str]=[],
                 inde:List[str]=[],
-                tail:List[str]=[]):
-        self.path=path
-        self.vbname=vbname
-        self.version=version
-        self.symbol=symbol
-        self.vowel=vowel
-        self.voicon=voicon
-        self.unvcon=unvcon
-        self.inde=inde
-        self.tail=tail
+                tail:List[str]=[],
+                pitch:str="",
+                model:List[Tuple[str,str,int]]=[]):
+        self.path:str=path
+        self.vbname:str=vbname
+        self.version:str=version
+        self.symbol:List[Tuple[str,str,str]]=symbol
+        self.vowel:List[Tuple[str,str]]=vowel
+        self.voicon:List[str]=voicon
+        self.unvcon:List[str]=unvcon
+        self.inde:List[str]=inde
+        self.tail:List[str]=tail
+        self.pitch:str=pitch
+        self.model=model
     
 def openvb(path:str):
     '''
@@ -1110,6 +1232,8 @@ def openvb(path:str):
     unvcon=[]
     inde=[]
     tail=[]
+    pitch=""
+    model=[]
     #读SKI
     with open(os.path.join(path,"SKI"),"rb") as skifile:
         headlength={"6.1":68,
@@ -1145,8 +1269,16 @@ def openvb(path:str):
                 inde=[]
             deleteemptystr(tail)
             deleteemptystr(inde)
-            skreadstr(skifile)#可能是打包的音阶，但目前不确定
+            pitch=skreadstr(skifile)#可能是打包的音阶，但目前不确定
             skifile.read(56)
+            #dv模型列表
+            while(len(skifile.read(4))==4):
+                skifile.read(4)#0
+                mname=skreadstr(skifile)
+                mpitch=skreadstr(skifile)
+                mpointer=skreadint(skifile)
+                skifile.read(4)#0
+                model.append((mname,mpitch,mpointer))
     return Dvbank(os.path.abspath(path),
                 name,
                 version,
@@ -1155,11 +1287,15 @@ def openvb(path:str):
                 voicon,
                 unvcon,
                 inde,
-                tail)
+                tail,
+                pitch,
+                model)
 
 def main():
-    d=opendv(r"C:\Users\lin\Desktop\吹灭小山河.dv")
-    d.to_music21_score(use_hanzi=True).show()
-  
+    d=opendv(r"C:\Users\lin\Desktop\1.dv")
+    seg=d.track[0].segment[0]
+    seg.setstart(seg.start+960)
+    d.save(r"C:\Users\lin\Desktop\2.dv")
+ 
 if(__name__=="__main__"):
     main()
