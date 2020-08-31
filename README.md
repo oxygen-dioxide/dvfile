@@ -25,7 +25,7 @@
 
     - 曲速标记：位置、曲速
     - 节拍标记：位置、每小节拍数、音符分数
-    - 音轨属性：音轨名、音轨音量、独奏、静音
+    - 音轨属性：音轨名、音轨音量、独奏、静音、双声道平衡
     - 区段属性：区段名、区段音源名、起点、长度
     - 音符属性：起点、长度、音高、歌词汉字、歌词拼音、滑音(弯曲深度、弯曲长度、头部滑音长度、尾部滑音长度)、颤音(颤音长度、颤音幅度、颤音速度、渲染出的颤音曲线)
     - 伴奏音轨：音轨名、音轨音量、独奏、静音、文件名、起点
@@ -33,12 +33,10 @@
 
     目前不能解析的内容（保存时将还原默认值）：
 
-    - 音轨属性：双声道平衡
     - 音符属性：音素
 
 - 导出ust、nn文件（需要[utaufile](https://gitee.com/oxygendioxide/utaufile)）
 - 导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
-- 导出musicxml(需要[music21](http://web.mit.edu/music21/doc/index.html)、[utaufile](https://gitee.com/oxygendioxide/utaufile))
 - 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)、[utaufile](https://gitee.com/oxygendioxide/utaufile)和[musescore](http://musescore.org)(独立软件)）
 - 批量获取歌词
 - 量化（将音符对齐到节拍线）
@@ -46,15 +44,6 @@
 
 ### dvtb文件
 - 解析与保存dvtb文件
-
-### dv音源
-- 解析dv音源
-
-    目前可以解析的内容：
-    
-    - 发音列表：音节列表、元音列表、浊辅音列表、清辅音列表、独立发音列表、尾音列表
-
-    支持的引擎版本：6.1  6.0  5.1  4.02
 
 ## 示例
 
