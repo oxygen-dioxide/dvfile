@@ -4,7 +4,7 @@ import copy
 import math
 import numpy
 import struct
-from typing import List,Tuple
+from typing import List,Tuple,Dict
 
 def skreadint(file)->int:
     return struct.unpack("l",file.read(4))[0]
@@ -30,7 +30,7 @@ def skwritebytes(s:bytes)->bytes:
 def skwritestr(s:str)->bytes:
     return skwritebytes(bytes(s,"utf8"))
 
-def skwritearray(ar)->bytes:
+def skwritearray(ar:numpy.ndarray)->bytes:
     return skwritebytes(skwriteint(ar.shape[0])+ar.tobytes())
 
 def skwritelist(l:list)->bytes:
@@ -44,6 +44,10 @@ def deleteemptystr(l:List[str]):
     #空字符串经过split后得到[""]，这里转为[]
     if(l!=[] and l[-1]==""):
         l.pop()
+
+def cutparam(ar:numpy.ndarray,l:int,default:int):
+    #TODO
+    pass
 
 #dv文件
 class Dvnote():
@@ -224,8 +228,8 @@ class Dvsegment():
         return seg
 
     def __radd__(self,other):
-        #为适配sum，规定：其他类型+Dvsegment返回原Dvsegment
-        return self
+        #为适配sum，规定：其他类型+Dvsegment返回原Dvsegment的副本
+        return copy.deepcopy(self)
     
     def setstart(self,start:int):
         """
@@ -239,7 +243,6 @@ class Dvsegment():
         #参数移动
         for param in (self.pit,self.vol,self.bre,self.gen):
             param[:,0]-=delta
-        #TODO
         return self
 
     def getlyric(self,use_hanzi:bool=False,ignore:set=set()):
@@ -263,9 +266,7 @@ class Dvsegment():
         '''
         音符按开始时间排序
         '''
-        def sortkey(note):
-            return note.start
-        self.note=sorted(self.note,key=sortkey)
+        self.note=sorted(self.note,key=lambda x:(x.start,x.notenum))
         return self
         
     def cut(self,head:bool=True,tail:bool=True):
@@ -285,6 +286,44 @@ class Dvsegment():
                 if(self.note[i].start+self.note[i].length<=self.length):
                     break
             self.note=self.note[:i+1]
+        return self
+    
+    def cutparam(self,head:bool=True,tail:bool=True):
+        """
+        切去音轨两端的无效参数
+        head:是否切去音轨开头的无效参数,bool
+        tail:是否切去音轨结尾的无效参数,bool
+        """
+        #TODO
+        return self
+    
+    def fixnoteoverlap(self):
+        """
+        修复音符重叠
+        起点相同的音符，保留音高最高的
+        起点不同的重叠音符，截取前一个音符的重叠部分
+        """
+        self.sort()#按开始时间排序
+        newnotelist=[]
+        for (i,note) in enumerate(self.note[:-1]):
+            nextnote=self.note[i+1]
+            if(note.start>nextnote.start):
+                if(note.start+note.length>nextnote.start):
+                    note.length=nextnote.start-note.start
+                newnotelist.append(note)
+        newnotelist.append(self.note[-1])
+        self.note=newnotelist
+        return self
+        #TODO
+
+    def fix(self):
+        """
+        自动修复音轨：
+        - 删除音轨两端的无效音符和无效参数
+        - 音符按开始时间排序
+        - 自动修复音符重叠
+        """
+        #TODO
         return self
     
     def quantize(self,d:int):
@@ -394,11 +433,11 @@ class Dvsegment():
         """
         计算音轨的音高曲线（包括基础音高曲线和编辑过的曲线部分）
         """
+        #暂不支持变速曲
         p=self.basicpitch(tempolist)#基础音高曲线
         dp=numpy.interp(numpy.linspace(0,self.length-1,num=self.length),self.pit[:,0],self.pit[:,1],left=-1,right=-1)#编辑过的曲线部分
         sgn=(numpy.sign(dp)+1)//2
         return sgn*dp+(1-sgn)*p
-        #TODO
 
     def to_ust_file(self,use_hanzi:bool=False):
         '''
@@ -409,14 +448,16 @@ class Dvsegment():
         ust=Ustfile()
         time=0
         for note in self.note:
-            if(note.start!=time):
-                ust.note+=[Ustnote(length=(note.start-time),lyric="R",notenum=60)]
+            if(note.start!=time):#休止符
+                ust.note.append(Ustnote(length=(note.start-time),lyric="R",notenum=60))
             if(use_hanzi):
                 lyric=note.hanzi
             else:
                 lyric=note.pinyin
-            ust.note+=[Ustnote(length=note.length,lyric=lyric,notenum=note.notenum)]
+            ust.note.append(Ustnote(length=note.length,lyric=lyric,notenum=note.notenum))
             time=note.length+note.start
+        if(self.length!=time):#末尾休止符
+            ust.note.append(Ustnote(length=self.length-time,lyric="R",notenum=60))
         return ust
     
     def to_nn_file(self):
@@ -481,6 +522,74 @@ class Dvsegment():
                                                 lyric=n.pinyin))
         return iftpy.Iftptrack(note=iftpnotes,beat=beat,name=self.name)
         #TODO
+
+def music21_stream_to_dv_segment(st)->Dvsegment:
+    """
+    将music21音轨对象转为dv区段
+    """
+    import music21
+    dvnote=[]
+    for note in st.flat.getElementsByClass(music21.note.Note):
+        if(note.lyric==None):#连音符在music21中没有歌词
+            lyric="-"
+        else:
+            lyric=note.lyric
+        dvnote.append(Dvnote(start=int(note.offset*480),
+                             length=int(note.duration.quarterLength*480),
+                             notenum=note.pitch.midi,
+                             pinyin=lyric,
+                             hanzi=lyric))
+    #TODO
+    return Dvsegment(start=1920,length=int(st.duration.quarterLength*480),note=dvnote)
+
+def midi_track_to_dv_segment(mt)->Dvsegment:
+    """
+    将mido midi音轨对象转为dv区段
+    """
+    tick=0
+    lyric=""
+    note:Dict[int,Tuple[str,int]]={}#{音高:(歌词,开始时间)}
+    dvnote=[]
+    for signal in mt:
+        tick+=signal.time
+        if(signal.type=="note_on"):
+            #将新音符注册到键位-音符字典中
+            note[signal.note]=(lyric,tick)
+        elif(signal.type=="note_off"):
+            #从键位-音符字典中找到音符，并弹出
+            n=note.pop(signal.note)
+            dvnote.append(Dvnote(start=n[1],
+                          length=tick-n[1],
+                          notenum=signal.note,
+                          pinyin=n[0],
+                          hanzi=n[0]))
+        elif(signal.type=="lyrics"):
+            lyric=signal.text
+    return Dvsegment(start=1920,length=tick,note=dvnote)
+    #TODO
+
+def to_dv_segment(a,track:int=0)->Dvsegment:
+    """
+    将其他类型的音轨工程对象a转为dv区段
+    track：如果a为多轨对象，则转换第track轨，默认为0，int。
+    支持对象类型：utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile, mido.MidiTrack, mido.MidiFile
+    """
+    type_name=type(a).__name__
+    #从对象类型到所调用函数的字典
+    type_function_dict={
+        "Dvsegment":copy.deepcopy,#dv区段对象
+        "Dvtrack":lambda x:sum(x.segment),#dv音轨对象
+        "Dvfile":lambda x:sum(x.track[track].segment),#dv工程对象
+        "MidiTrack":midi_track_to_dv_segment,#mido音轨对象
+        "MidiFile":lambda x:midi_track_to_dv_segment(x.tracks[track]),#mido文件对象
+        "Stream":music21_stream_to_dv_segment,#Music21普通序列对象
+        "Measure":music21_stream_to_dv_segment,#Music21小节对象
+        "Part":music21_stream_to_dv_segment,#Music21多轨中的单轨对象
+        "Score":lambda x:music21_stream_to_dv_segment(x.parts[track]),#Music21多轨工程对象
+    }
+    #如果在这个字典中没有找到函数，则默认调用a.to_dv_segment()
+    return type_function_dict.get(type_name,lambda x:x.to_dv_segment())(a)
+    #TODO
 
 class Dvtrack():
     '''
@@ -553,6 +662,16 @@ class Dvtrack():
             seg.cut(head=head,tail=tail)
         return self
     
+    def fixnoteoverlap(self):
+        """
+        修复音符重叠
+        起点相同的音符，保留音高最高的
+        起点不同的重叠音符，截取前一个音符的重叠部分
+        """
+        for seg in self.segment:
+            seg.fixnoteoverlap()
+        return self
+
     def filter(self,f):
         '''
         按函数过滤音轨中的音符
@@ -624,6 +743,29 @@ class Dvtrack():
         seg.name=self.name
         return seg.to_iftp_track(use_hanzi=use_hanzi,beat=beat)
         #TODO
+
+def to_dv_track(a,track:int=0)->Dvtrack:
+    """
+    将其他类型的音轨工程对象a转为dv音轨
+    track：如果a为多轨对象，则转换第track轨，int。
+    支持对象类型：utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile
+    """
+    type_name=type(a).__name__
+    #从对象类型到所调用函数的字典
+    type_function_dict={
+        "Dvsegment":lambda x:Dvtrack(name=x.name,segment=[copy.deepcopy(x)]),#dv区段对象
+        "Dvtrack":copy.deepcopy,#dv音轨对象
+        "Dvfile":lambda x:copy.deepcopy(x.track[track]),#dv工程对象
+        "MidiTrack":lambda x:Dvtrack(segment=[to_dv_segment(x)]),#mido音轨对象
+        "MidiFile":lambda x:Dvtrack(segment=[to_dv_segment(x,track=track)]),#mido文件对象
+        "Stream":lambda x:Dvtrack(segment=[to_dv_segment(x)]),
+        "Measure":lambda x:Dvtrack(segment=[to_dv_segment(x)]),
+        "Part":lambda x:Dvtrack(segment=[to_dv_segment(x)]),
+        "Score":lambda x:Dvtrack(segment=[to_dv_segment(x,track=track)])
+    }
+    #如果在这个字典中没有找到函数，则默认调用a.to_dv_track()
+    return type_function_dict.get(type_name,lambda x:x.to_dv_track())(a)
+    #TODO
 
 class Dvinst():
     '''
@@ -814,6 +956,16 @@ class Dvfile():
             tr.cut(head=head,tail=tail)
         return self
     
+    def fixnoteoverlap(self):
+        """
+        修复音符重叠
+        起点相同的音符，保留音高最高的
+        起点不同的重叠音符，截取前一个音符的重叠部分
+        """
+        for tr in self.track:
+            tr.fixnoteoverlap()
+        return self
+    
     def filter(self,func):
         '''
         按函数过滤工程中的音符
@@ -906,8 +1058,13 @@ class Dvfile():
         sc=music21.stream.Score()
         #音轨
         starttime=self.pos2tick(1)
+        #求音轨长度
+        length=max(i.segment[-1].start+i.segment[-1].length for i in self.track)-starttime
+        #转换音轨
         for tr in self.track:
-            u=sum(tr.segment,Dvsegment(start=starttime,length=0)).to_ust_file(use_hanzi=use_hanzi)
+            u=sum(tr.segment,Dvsegment(start=starttime,length=0))
+            u.length=length
+            u=u.to_ust_file(use_hanzi=use_hanzi)
             u.tempo=0#阻止Ustfile将曲速写入music21对象，交由dvfile来写
             p=music21.stream.Part(u.to_music21_stream())
             p.partName=tr.name
@@ -935,7 +1092,29 @@ class Dvfile():
         return iftpy.Iftpfile(track=iftptracks,beat=beat).settempo(tempo)
         #TODO
 
-def opendv(filename:str):
+def to_dv_file(a)->Dvfile:
+    """
+    将其他类型的音轨工程对象a转为dv工程对象
+    支持对象类型：utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile
+    """
+    type_name=type(a).__name__
+    #从对象类型到所调用函数的字典
+    type_function_dict={
+        "Dvsegment":lambda x:Dvfile(track=[Dvtrack(name=x.name,segment=[copy.deepcopy(x)])]),
+        "Dvtrack":lambda x:Dvfile(track=[copy.deepcopy(x)]),
+        "Dvfile":copy.deepcopy,
+        "MidiTrack":lambda x:Dvfile(track=[to_dv_track(x)]),
+        "MidiFile":lambda x:Dvfile(track=[to_dv_track(tr) for tr in x.tracks]),
+        "Stream":lambda x:Dvfile(track=[to_dv_track(x)]),
+        "Measure":lambda x:Dvfile(track=[to_dv_track(x)]),
+        "Part":lambda x:Dvfile(track=[to_dv_track(x)]),
+        "Score":lambda x:Dvfile(track=[to_dv_track(tr) for tr in x.parts]),
+    }
+    #如果在这个字典中没有找到函数，则默认调用a.to_dv_file()
+    return type_function_dict.get(type_name,lambda x:x.to_dv_file())(a)
+    #TODO
+
+def opendv(filename:str)->Dvfile:
     '''
     打开sk或dv文件，返回Dvfile对象
     '''
@@ -1017,10 +1196,10 @@ def opendv(filename:str):
                     #音量Volume，取值范围[0,256]
                     vol=numpy.fromfile(file,"<i4",skreadint(file)//4)[1:].reshape([-1,2])
                     #return numpy.fromfile(file,"<i4",skreadint(file)//4)
-                    #音调Pitch，以音分为单位，转换成midi标准的100倍，-1表示按默认音调
+                    #音调Pitch，以音分为单位，转换成midi标准的100倍，0表示按默认音调
                     pit=numpy.fromfile(file,"<i4",skreadint(file)//4)[1:].reshape([-1,2])
                     sgn=(numpy.sign(pit[:,1])+1)//2
-                    pit[:,1]=(sgn-1)+sgn*(11550-pit[:,1])
+                    pit[:,1]=sgn*(11550-pit[:,1])
                     skreadbytes(file)
                     #气声Breathness，取值范围[0,256]
                     bre=numpy.fromfile(file,"<i4",skreadint(file)//4)[1:].reshape([-1,2])
@@ -1126,7 +1305,7 @@ class Dvtbfile():
         with open(filename,mode="wb") as file:
             file.write(bytes(self))
     
-def opendvtb(filename:str):
+def opendvtb(filename:str)->Dvtbfile:
     '''
     打开dvtb文件，返回Dvtbfile对象
     '''
@@ -1209,7 +1388,7 @@ class Dvbank():
         self.pitch:str=pitch
         self.model=model
     
-def openvb(path:str):
+def openvb(path:str)->Dvbank:
     '''
     打开dv音源，返回Dvbank对象
     目前支持引擎版本6.1  6.0  5.1  4.02
@@ -1292,10 +1471,7 @@ def openvb(path:str):
                 model)
 
 def main():
-    d=opendv(r"C:\Users\lin\Desktop\1.dv")
-    seg=d.track[0].segment[0]
-    seg.setstart(seg.start+960)
-    d.save(r"C:\Users\lin\Desktop\2.dv")
+    pass
  
 if(__name__=="__main__"):
     main()

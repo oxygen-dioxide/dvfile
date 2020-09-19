@@ -44,22 +44,26 @@ dv文件对象可以用save方法保存为dv文件
 ```
 
 ## 文件格式转换
-dv文件对象可以导出ust、nn、mid文件
+dv文件对象可以导出ust、nn、mid、musicxml文件，需要安装好对应文件的python库
 ```py
 >>> d.to_ust_file().save("zhiyaopingfan.ust")#导出ust（需要utaufile）
 >>> d.to_nn_file().save("zhiyaopingfan.nn")#导出nn（需要utaufile）
 >>> d.to_midi_file().save("zhiyaopingfan.mid")#导出mid（需要mido）
+>>> d.to_music21_score().write("xml",fp="zhiyaopingfan.musicxml")#导出musicxml（需要utaufile和music21）
 ```
-dvfile在导出文件时，如果目标文件不支持汉字拼音双重歌词（ust、mid、music21），则默认使用拼音歌词以保证大多数引擎的兼容性。如果需要导出汉字歌词，请使用use_hanzi=True参数
+dvfile在导出文件时，如果目标文件不支持汉字拼音双重歌词（ust、mid、music21），则默认使用拼音歌词以保证对大多数歌声合成软件的兼容性。如果需要导出汉字歌词，请使用use_hanzi=True参数
 ```py
-d.to_midi_file(use_hanzi=True).save("zhiyaopingfan.mid")
+>>> d.to_midi_file(use_hanzi=True).save("zhiyaopingfan.mid")
 ```
-
 
 ## 导出五线谱
-安装music1 musescore，并按照上一章的方法配置好环境后，可以导出五线谱
+安装utaufile、music21和musescore，并按照上一章的方法配置好环境后，可以导出五线谱
 ```py
 >>> d.to_music21_score(use_hanzi=True).show()
 ```
-由于music21库很大，这行代码需要等待几秒钟，然后会打开musescore窗口并显示五线谱，可以导出为图片或pdf文件。
+由于music21库很大，第一次运行这行代码需要等待几秒钟，然后会打开musescore窗口并显示五线谱，可以导出为图片或pdf文件。
 ![](Resource/2020-08-11-19-58-16.png)
+
+多轨dv文件，导出五线谱可能会显示加载错误
+![](Resource/2020-09-02-09-14-55.png)
+这种情况请无视错误并点击“Ignore”，五线谱可以正常显示（此问题可能会在未来版本的Dvfile中解决）。
