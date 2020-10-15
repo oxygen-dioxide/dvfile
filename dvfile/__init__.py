@@ -45,9 +45,17 @@ def deleteemptystr(l:List[str]):
     if(l!=[] and l[-1]==""):
         l.pop()
 
-def cutparam(ar:numpy.ndarray,l:int,default:int):
-    #TODO
-    pass
+def cutparam(ar:numpy.ndarray,length:int,default:int,head:bool=True,tail:bool=True)->numpy.ndarray:
+    l,r=numpy.interp((0,length),ar[:,0],ar[:,1]).astype(numpy.int)
+    if(head):
+        ar=ar[ar[:,0]>0]
+        ar=numpy.append([[-1,default],
+                         [0,l]],ar,axis=0)
+    if(tail):
+        ar=ar[ar[:,0]<length]
+        ar=numpy.append(ar,[[length,r],
+                           [length+1,default]],axis=0)
+    return ar
 
 #dv文件
 class Dvnote():
@@ -145,7 +153,7 @@ class Dvsegment():
     vbname:音源名，str
     note:音符列表
     vol：音量Volume，取值范围[0,256]，numpy.array([[x,y]])
-    pit：音调Pitch，以音分为单位，转换成midi标准的100倍，-1表示按默认音调，numpy.array([[x,y]])
+    pit：音调Pitch，以音分为单位，转换成midi标准的100倍，0表示按默认音调，numpy.array([[x,y]])
     bre：气声Breathness，取值范围[0,256]，numpy.array([[x,y]])
     gen：声线（性别）Gender，取值范围[0,256]，numpy.array([[x,y]])
     '''
@@ -290,11 +298,14 @@ class Dvsegment():
     
     def cutparam(self,head:bool=True,tail:bool=True):
         """
-        切去音轨两端的无效参数
-        head:是否切去音轨开头的无效参数,bool
-        tail:是否切去音轨结尾的无效参数,bool
+        切去区段两端的无效参数
+        head:是否切去区段开头的无效参数,bool
+        tail:是否切去区段结尾的无效参数,bool
         """
-        #TODO
+        self.vol=cutparam(ar=self.vol,length=self.length,default=128,head=head,tail=tail)
+        self.pit=cutparam(ar=self.pit,length=self.length,default=0,head=head,tail=tail)
+        self.bre=cutparam(ar=self.bre,length=self.length,default=128,head=head,tail=tail)
+        self.gen=cutparam(ar=self.gen,length=self.length,default=128,head=head,tail=tail)
         return self
     
     def fixnoteoverlap(self):
@@ -307,24 +318,22 @@ class Dvsegment():
         newnotelist=[]
         for (i,note) in enumerate(self.note[:-1]):
             nextnote=self.note[i+1]
-            if(note.start>nextnote.start):
+            if(note.start<nextnote.start):#如果音符开始时间相同，则不输出。
                 if(note.start+note.length>nextnote.start):
                     note.length=nextnote.start-note.start
                 newnotelist.append(note)
         newnotelist.append(self.note[-1])
         self.note=newnotelist
         return self
-        #TODO
 
     def fix(self):
         """
-        自动修复音轨：
-        - 删除音轨两端的无效音符和无效参数
+        自动修复区段：
+        - 删除区段两端的无效音符和无效参数
         - 音符按开始时间排序
-        - 自动修复音符重叠
+        - 修复音符重叠
         """
-        #TODO
-        return self
+        return self.cut().cutparam().fixnoteoverlap()
     
     def quantize(self,d:int):
         '''
@@ -435,7 +444,7 @@ class Dvsegment():
         """
         #暂不支持变速曲
         p=self.basicpitch(tempolist)#基础音高曲线
-        dp=numpy.interp(numpy.linspace(0,self.length-1,num=self.length),self.pit[:,0],self.pit[:,1],left=-1,right=-1)#编辑过的曲线部分
+        dp=numpy.interp(numpy.linspace(0,self.length-1,num=self.length),self.pit[:,0],self.pit[:,1],left=0,right=0)#编辑过的曲线部分
         sgn=(numpy.sign(dp)+1)//2
         return sgn*dp+(1-sgn)*p
 
@@ -505,6 +514,7 @@ class Dvsegment():
         return self.to_ust_file(use_hanzi).to_music21_stream()
     
     def to_iftp_track(self,use_hanzi:bool=False,beat:int=4):
+        #iftpy暂停开发，请勿使用
         import iftpy
         iftpnotes=[]
         barlen=480*beat
@@ -521,7 +531,6 @@ class Dvsegment():
                                                 notenum=n.notenum,
                                                 lyric=n.pinyin))
         return iftpy.Iftptrack(note=iftpnotes,beat=beat,name=self.name)
-        #TODO
 
 def music21_stream_to_dv_segment(st)->Dvsegment:
     """
@@ -572,7 +581,9 @@ def to_dv_segment(a,track:int=0)->Dvsegment:
     """
     将其他类型的音轨工程对象a转为dv区段
     track：如果a为多轨对象，则转换第track轨，默认为0，int。
-    支持对象类型：utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile, mido.MidiTrack, mido.MidiFile
+    支持对象类型：
+    utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile, mido.MidiTrack,
+    mido.MidiFile, music21.stream.Stream, music21.stream.Measure, music21.stream.Part, music21.stream.Score
     """
     type_name=type(a).__name__
     #从对象类型到所调用函数的字典
@@ -662,6 +673,16 @@ class Dvtrack():
             seg.cut(head=head,tail=tail)
         return self
     
+    def cutparam(self,head:bool=True,tail:bool=True):
+        """
+        切去区段两端的无效参数
+        head:是否切去区段开头的无效参数,bool
+        tail:是否切去区段结尾的无效参数,bool
+        """
+        for seg in self.segment:
+            seg.cutparam(head,tail)
+        return self
+
     def fixnoteoverlap(self):
         """
         修复音符重叠
@@ -671,6 +692,16 @@ class Dvtrack():
         for seg in self.segment:
             seg.fixnoteoverlap()
         return self
+
+    def fix(self):
+        """
+        自动修复音轨：
+        - 删除区段两端的无效音符和无效参数
+        - 音符按开始时间排序
+        - 修复音符重叠
+        """
+        for seg in self.segment:
+            seg.fix()
 
     def filter(self,f):
         '''
@@ -739,16 +770,18 @@ class Dvtrack():
         return self.to_ust_file(use_hanzi).to_music21_stream()
     
     def to_iftp_track(self,use_hanzi:bool=False,beat:int=4):
+        #iftpy暂停开发，请勿使用
         seg=sum(self.segment,Dvsegment(0,0))
         seg.name=self.name
         return seg.to_iftp_track(use_hanzi=use_hanzi,beat=beat)
-        #TODO
 
 def to_dv_track(a,track:int=0)->Dvtrack:
     """
     将其他类型的音轨工程对象a转为dv音轨
     track：如果a为多轨对象，则转换第track轨，int。
-    支持对象类型：utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile
+    支持对象类型：
+    utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile, mido.MidiTrack,
+    mido.MidiFile, music21.stream.Stream, music21.stream.Measure, music21.stream.Part, music21.stream.Score
     """
     type_name=type(a).__name__
     #从对象类型到所调用函数的字典
@@ -956,6 +989,16 @@ class Dvfile():
             tr.cut(head=head,tail=tail)
         return self
     
+    def cutparam(self,head:bool=True,tail:bool=True):
+        """
+        切去区段两端的无效参数
+        head:是否切去区段开头的无效参数,bool
+        tail:是否切去区段结尾的无效参数,bool
+        """
+        for seg in self.track:
+            seg.cutparam(head=head,tail=tail)
+        return self
+
     def fixnoteoverlap(self):
         """
         修复音符重叠
@@ -966,6 +1009,17 @@ class Dvfile():
             tr.fixnoteoverlap()
         return self
     
+    def fix(self):
+        """
+        自动修复工程：
+        - 删除区段两端的无效音符和无效参数
+        - 音符按开始时间排序
+        - 修复音符重叠
+        """
+        for tr in self.track:
+            tr.fix()
+        return self
+
     def filter(self,func):
         '''
         按函数过滤工程中的音符
@@ -1083,6 +1137,7 @@ class Dvfile():
         return sc
     
     def to_iftp_file(self,use_hanzi:bool=False):
+        #iftpy暂停开发，请勿使用
         import iftpy
         iftptracks=[]
         tempo=self.tempo[0][1]
@@ -1090,12 +1145,13 @@ class Dvfile():
         for tr in self.track:
             iftptracks.append(tr.to_iftp_track(use_hanzi=use_hanzi,beat=beat))
         return iftpy.Iftpfile(track=iftptracks,beat=beat).settempo(tempo)
-        #TODO
 
 def to_dv_file(a)->Dvfile:
     """
     将其他类型的音轨工程对象a转为dv工程对象
-    支持对象类型：utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile
+    支持对象类型：
+    utaufile.Ustfile, utaufile.Nnfile, dvfile.Dvsegment, dvfile.Dvtrack, dvfile.Dvfile, mido.MidiTrack,
+    mido.MidiFile, music21.stream.Stream, music21.stream.Measure, music21.stream.Part, music21.stream.Score
     """
     type_name=type(a).__name__
     #从对象类型到所调用函数的字典
@@ -1112,7 +1168,7 @@ def to_dv_file(a)->Dvfile:
     }
     #如果在这个字典中没有找到函数，则默认调用a.to_dv_file()
     return type_function_dict.get(type_name,lambda x:x.to_dv_file())(a)
-    #TODO
+    #TODO:支持music21对象的曲速、节拍
 
 def opendv(filename:str)->Dvfile:
     '''
@@ -1472,6 +1528,6 @@ def openvb(path:str)->Dvbank:
 
 def main():
     pass
- 
+    
 if(__name__=="__main__"):
     main()
