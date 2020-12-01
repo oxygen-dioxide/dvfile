@@ -1,8 +1,5 @@
 # dvfile-python
 
-![](https://gitee.com/oxygendioxide/dvfile/raw/master/resources/1.png)
-（[《奋楫》](https://www.bilibili.com/video/BV1xJ411x754?from=search&seid=2690624188195353743)作曲：格里特/髅髅，作词：冥凰）
-
 ## 介绍
 
 操作[deepvocal](https://www.deep-vocal.com/) dv文件的python库。
@@ -35,15 +32,14 @@
 
     - 音符属性：音素
 
-- 导出ust、nn文件（需要[utaufile](https://gitee.com/oxygendioxide/utaufile)）
-- 导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
+- 导入、导出ust、nn文件（需要[utaufile](https://gitee.com/oxygendioxide/utaufile)）
+- 导入、导出mid文件（需要[mido](https://mido.readthedocs.io/en/latest/index.html)）
+- 导入、导出music21对象（需要[music21](http://web.mit.edu/music21/doc/index.html)、[utaufile](https://gitee.com/oxygendioxide/utaufile)）
 - 导出五线谱（需要[music21](http://web.mit.edu/music21/doc/index.html)、[utaufile](https://gitee.com/oxygendioxide/utaufile)和[musescore](http://musescore.org)(独立软件)）
 - 批量获取歌词
 - 量化（将音符对齐到节拍线）
 - 移调（音符与pit批量上下移动）
-
-### dvtb文件
-- 解析与保存dvtb文件
+- 自动修复工程（删除区段两端的无效音符和无效参数，音符按开始时间排序，修复音符重叠）
 
 ## 示例
 
