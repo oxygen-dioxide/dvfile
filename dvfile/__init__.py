@@ -5,7 +5,7 @@ import copy
 import math
 import numpy
 import struct
-from typing import List,Tuple,Dict
+from typing import List,Tuple,Dict,Union
 
 def skreadint(file)->int:
     return struct.unpack("l",file.read(4))[0]
@@ -151,7 +151,7 @@ class Dvsegment():
     start:起点，480为一拍，从-3小节算起，int
     length:长度，480为一拍，int
     name:区段名，str
-    vbname:音源名，str
+    singer:音源名，str
     note:音符列表
     vol：音量Volume，取值范围[0,256]，numpy.array([[x,y]])
     pit：音调Pitch，以音分为单位，转换成midi标准的100倍，0表示按默认音调，numpy.array([[x,y]])
@@ -161,7 +161,7 @@ class Dvsegment():
     def __init__(self,start:int,
                  length:int,
                  name:str="",
-                 vbname:str="",
+                 singer:str="",
                  note:List[Dvnote]=[],
                  vol:numpy.array=None,
                  pit:numpy.array=None,
@@ -172,7 +172,7 @@ class Dvsegment():
         self.start:int=start
         self.length:int=length
         self.name:str=name
-        self.vbname:str=vbname
+        self.singer:str=singer
         self.note:List[Dvnote]=note
         NoneType=type(None)
         if(type(vol)==NoneType):
@@ -197,7 +197,7 @@ class Dvsegment():
             self.start,
             self.length,
             self.name,
-            self.vbname)
+            self.singer)
         for i in self.note:
             s+=str(i)
         return s
@@ -209,7 +209,7 @@ class Dvsegment():
         b=(skwriteint(self.start)
            +skwriteint(self.length)
            +skwritestr(self.name)
-           +skwritestr(self.vbname)
+           +skwritestr(self.singer)
            +skwritelist(self.note)
            +skwritearray(self.vol)
            +skwritearray(pit)
@@ -227,7 +227,7 @@ class Dvsegment():
         deltatime=other.start-self.start#时间差
         seg=Dvsegment(start=self.start,
                       name=self.name,
-                      vbname=self.vbname,
+                      singer=self.singer,
                       length=deltatime+other.length,
                       note=copy.deepcopy(self.note))
         notes=copy.deepcopy(other.note)
@@ -549,34 +549,34 @@ def music21_stream_to_dv_segment(st)->Dvsegment:
                              notenum=note.pitch.midi,
                              pinyin=lyric,
                              hanzi=lyric))
-    #TODO
-    return Dvsegment(start=1920,length=int(st.duration.quarterLength*480),note=dvnote)
+    return Dvsegment(start=7680,length=int(st.duration.quarterLength*480),note=dvnote)
 
-def midi_track_to_dv_segment(mt)->Dvsegment:
+def midi_track_to_dv_segment(mtr,ticks_per_beat:int=480)->Dvsegment:
     """
     将mido midi音轨对象转为dv区段
+    ticks_per_beat:midi音轨中每拍的tick数，默认480
     """
     tick=0
     lyric=""
     note:Dict[int,Tuple[str,int]]={}#{音高:(歌词,开始时间)}
     dvnote=[]
-    for signal in mt:
+    for signal in mtr:
         tick+=signal.time
         if(signal.type=="note_on"):
             #将新音符注册到键位-音符字典中
             note[signal.note]=(lyric,tick)
         elif(signal.type=="note_off"):
             #从键位-音符字典中找到音符，并弹出
-            n=note.pop(signal.note)
-            dvnote.append(Dvnote(start=n[1],
-                          length=tick-n[1],
-                          notenum=signal.note,
-                          pinyin=n[0],
-                          hanzi=n[0]))
+            if(signal.note in note):
+                n=note.pop(signal.note)
+                dvnote.append(Dvnote(start=int(n[1]*480/ticks_per_beat),
+                            length=int((tick-n[1])*480/ticks_per_beat),
+                            notenum=signal.note,
+                            pinyin=n[0],
+                            hanzi=n[0]))
         elif(signal.type=="lyrics"):
             lyric=signal.text
-    return Dvsegment(start=1920,length=tick,note=dvnote)
-    #TODO
+    return Dvsegment(start=7680,length=int(tick*480/ticks_per_beat),note=dvnote,name=mtr.name)
 
 def to_dv_segment(a,track:int=0)->Dvsegment:
     """
@@ -601,17 +601,16 @@ def to_dv_segment(a,track:int=0)->Dvsegment:
     }
     #如果在这个字典中没有找到函数，则默认调用a.to_dv_segment()
     return type_function_dict.get(type_name,lambda x:x.to_dv_segment())(a)
-    #TODO
 
 class Dvtrack():
     '''
     dv音轨类
     name:音轨名，str
+    segment:区段列表
     volume:音量，int,[0,100]
     balance:左右声道平衡，int,[-50,50]
     mute:静音，bool
     solo:独奏，bool
-    segment:区段列表
     '''
     def __init__(self,name:str="",
                  segment:List[Dvsegment]=[],
@@ -656,7 +655,7 @@ class Dvtrack():
         for seg in self.segment:
             segstart=intquantize(seg.start,d)
             segend=intquantize(seg.start+seg.length,d)
-            seg=Dvsegment(segstart,0,seg.name,seg.vbname,[])+seg
+            seg=Dvsegment(segstart,0,seg.name,seg.singer,[])+seg
             seg.length=segend-segstart
             seg.quantize(d)
             new_seg+=[seg]
@@ -724,12 +723,12 @@ class Dvtrack():
             seg.filterout(s,use_hanzi)
         return self
 
-    def setvbname(self,vbname:str):
+    def setsinger(self,singer:str):
         """
         为音轨中的所有区段统一设置音源名
         """
         for seg in self.segment:
-            seg.vbname=vbname
+            seg.singer=singer
         return self
 
     def transpose(self,n:int):
@@ -790,8 +789,8 @@ def to_dv_track(a,track:int=0)->Dvtrack:
         "Dvsegment":lambda x:Dvtrack(name=x.name,segment=[copy.deepcopy(x)]),#dv区段对象
         "Dvtrack":copy.deepcopy,#dv音轨对象
         "Dvfile":lambda x:copy.deepcopy(x.track[track]),#dv工程对象
-        "MidiTrack":lambda x:Dvtrack(segment=[to_dv_segment(x)]),#mido音轨对象
-        "MidiFile":lambda x:Dvtrack(segment=[to_dv_segment(x,track=track)]),#mido文件对象
+        "MidiTrack":lambda x:Dvtrack(name=x.name,segment=[to_dv_segment(x)]),#mido音轨对象
+        "MidiFile":lambda x:Dvtrack(segment=[midi_track_to_dv_segment(x.tracks[track],ticks_per_beat=x.ticks_per_beats)],name=x.tracks[track].name),#mido文件对象
         "Stream":lambda x:Dvtrack(segment=[to_dv_segment(x)]),
         "Measure":lambda x:Dvtrack(segment=[to_dv_segment(x)]),
         "Part":lambda x:Dvtrack(segment=[to_dv_segment(x)]),
@@ -799,7 +798,6 @@ def to_dv_track(a,track:int=0)->Dvtrack:
     }
     #如果在这个字典中没有找到函数，则默认调用a.to_dv_track()
     return type_function_dict.get(type_name,lambda x:x.to_dv_track())(a)
-    #TODO
 
 class Dvinst():
     '''
@@ -858,10 +856,12 @@ class Dvfile():
     inst:伴奏音轨列表
     '''
     def __init__(self,
-                 tempo:List[Tuple[int,float]]=[(0,120.0)],
+                 tempo:Union[List[Tuple[int,float]],float,int]=[(0,120.0)],
                  beats:List[Tuple[int,int,int]]=[(-3,4,4)],
                  track:List[Dvtrack]=[],
                  inst:List[Dvinst]=[]):
+        if(type(tempo)!=list):
+            tempo=[(0,float(tempo))]
         if(track==[]):
             track=[]
         if(inst==[]):
@@ -1041,12 +1041,12 @@ class Dvfile():
             tr.filterout(s,use_hanzi)
         return self
 
-    def setvbname(self,vbname:str):
+    def setsinger(self,singer:str):
         '''
         为工程中的所有区段统一设置音源名
         '''
         for tr in self.track:
-            tr.setvbname(vbname)
+            tr.setsinger(singer)
         return self
 
     def transpose(self,n:int):
@@ -1161,7 +1161,7 @@ def to_dv_file(a)->Dvfile:
         "Dvtrack":lambda x:Dvfile(track=[copy.deepcopy(x)]),
         "Dvfile":copy.deepcopy,
         "MidiTrack":lambda x:Dvfile(track=[to_dv_track(x)]),
-        "MidiFile":lambda x:Dvfile(track=[to_dv_track(tr) for tr in x.tracks]),
+        "MidiFile":lambda x:Dvfile(track=[Dvtrack(name=tr.name,segment=[midi_track_to_dv_segment(tr,ticks_per_beat=x.ticks_per_beat)]) for tr in x.tracks]),
         "Stream":lambda x:Dvfile(track=[to_dv_track(x)]),
         "Measure":lambda x:Dvfile(track=[to_dv_track(x)]),
         "Part":lambda x:Dvfile(track=[to_dv_track(x)]),
@@ -1169,7 +1169,6 @@ def to_dv_file(a)->Dvfile:
     }
     #如果在这个字典中没有找到函数，则默认调用a.to_dv_file()
     return type_function_dict.get(type_name,lambda x:x.to_dv_file())(a)
-    #TODO:支持music21对象的曲速、节拍
 
 def opendv(filename:str)->Dvfile:
     '''
@@ -1204,7 +1203,7 @@ def opendv(filename:str)->Dvfile:
                     segstart=skreadint(file)
                     seglength=skreadint(file)
                     segname=skreadstr(file)
-                    vbname=skreadstr(file)
+                    singer=skreadstr(file)
                     file.read(4)#音符占用空间
                     note=[]
                     for i in range(0,skreadint(file)):#读音符
@@ -1267,7 +1266,7 @@ def opendv(filename:str)->Dvfile:
                     segment+=[Dvsegment(segstart,
                                         seglength,
                                         segname,
-                                        vbname,
+                                        singer,
                                         note,
                                         vol=vol,
                                         pit=pit,
@@ -1289,246 +1288,11 @@ def opendv(filename:str)->Dvfile:
                     inst+=[Dvinst(segstart,seglength,fname,trackname,volume,mute,solo)]
     return Dvfile(tempo=tempo,beats=beats,track=track,inst=inst)
 
-#dvtb文件
-class Dvtbfile():
-    '''
-    dvtb文件类
-    symbol：音节列表，[(音节,辅音,元音)]
-    vowel：元音列表，[(元音,来源)]
-    voicon：浊辅音列表，[str]
-    unvcon：清辅音列表，[str]
-    inde：独立发音列表，[str]
-    tail：尾音列表，[str]
-    wavpath：wav路径，[str]
-    build_all_models：是否生成所有模型，bool
-    build_which_models：指定生成哪些模型，str
-    modelpath：模型路径，str
-    outputpath：声库输出路径，str
-    pitch：音高列表，[str]
-    vbname：声库名称，str
-    '''
-    def __init__(self,
-                 symbol:List[Tuple[str,str,str]]=[],
-                 vowel:List[Tuple[str,str]]=[],
-                 voicon:List[str]=[],
-                 unvcon:List[str]=[],
-                 inde:List[str]=[],
-                 tail:List[str]=[],
-                 wavpath:List[str]=[],
-                 build_all_models:bool=True,
-                 build_which_models:str="",
-                 modelpath:str="",
-                 outputpath:str="",
-                 pitch:List[str]=[],
-                 vbname:str=""):
-        self.symbol:List[Tuple[str,str,str]]=symbol
-        self.vowel:List[Tuple[str,str]]=vowel
-        self.voicon:List[str]=voicon
-        self.unvcon:List[str]=unvcon
-        self.inde:List[str]=inde
-        self.tail:List[str]=tail
-        self.wavpath:List[str]=wavpath
-        self.build_all_models:bool=build_all_models
-        self.build_which_models:str=build_which_models
-        self.modelpath:str=modelpath
-        self.outputpath:str=outputpath
-        self.pitch:List[str]=pitch
-        self.vbname:str=vbname
-
-    def __bytes__(self):
-        b=(b'SHARPKEYTOOLBOX\x01\x00\x00\x00\x12\x13\x00\x00\x00\x00\x00\x00'
-           +skwritestr("\r\n".join([",".join(line) for line in self.symbol]))
-           +skwritestr("\r\n".join([",".join(line) for line in self.vowel]))
-           +skwritestr("\r\n".join(self.voicon))
-           +skwritestr("\r\n".join(self.unvcon))
-           +skwritestr("\r\n".join(self.inde))
-           +skwritestr("\r\n".join(self.tail))
-           +skwriteint(len(self.wavpath)))
-        for i in self.wavpath:
-            b+=skwritestr(i)
-        b+=(skwritebool(self.build_all_models)
-            +skwritestr(self.build_which_models)
-            +skwritestr(self.modelpath)
-            +skwritestr(self.outputpath)
-            +skwritestr(",".join(self.pitch))
-            +skwritestr(self.vbname))
-        return b
-    
-    def save(self,filename:str):
-        '''
-        保存dvtb文件
-        filename:文件名
-        '''
-        with open(filename,mode="wb") as file:
-            file.write(bytes(self))
-    
-def opendvtb(filename:str)->Dvtbfile:
-    '''
-    打开dvtb文件，返回Dvtbfile对象
-    '''
-    with open(filename,"rb") as file:
-        file.read(27)
-        #读字典
-        symbol=[]
-        for line in skreadstr(file).split("\r\n"):
-            line=line.split(",")
-            if(len(line)==3):
-                symbol.append(tuple(line))
-        vowel=[]
-        for line in skreadstr(file).split("\r\n"):
-            line=line.split(",")
-            if(len(line)==2):
-                vowel.append(tuple(line))
-        voicon=skreadstr(file).split("\r\n")
-        unvcon=skreadstr(file).split("\r\n")
-        inde=skreadstr(file).split("\r\n")
-        tail=skreadstr(file).split("\r\n")
-        #读wav目录
-        wavpath=[]
-        for i in range(0,skreadint(file)):
-            wavpath+=[skreadstr(file)]
-        build_all_models=file.read(1)==b'\x01'
-        build_which_models=skreadstr(file)
-        modelpath=skreadstr(file)
-        outputpath=skreadstr(file)
-        pitch=skreadstr(file).split(",")
-        vbname=skreadstr(file)
-    return Dvtbfile(symbol,
-                    vowel,
-                    voicon,
-                    unvcon,
-                    inde,
-                    tail,
-                    wavpath,
-                    build_all_models,
-                    build_which_models,
-                    modelpath,
-                    outputpath,
-                    pitch,
-                    vbname)
-
-#dv音源
-class Dvbank():
-    '''
-    dv音源类
-    path：路径
-    vbname：名称
-    version：引擎版本
-    symbol：音节列表，[(音节,辅音,元音)]
-    vowel：元音列表，[(元音,来源)]
-    voicon：浊辅音列表，[str]
-    unvcon：清辅音列表，[str]
-    inde：独立发音列表，[str]
-    tail：尾音列表，[str]
-    '''
-    def __init__(self,
-                path:str,
-                vbname:str,
-                version:str,
-                symbol:List[Tuple[str,str,str]]=[],
-                vowel:List[Tuple[str,str]]=[],
-                voicon:List[str]=[],
-                unvcon:List[str]=[],
-                inde:List[str]=[],
-                tail:List[str]=[],
-                pitch:str="",
-                model:List[Tuple[str,str,int]]=[]):
-        self.path:str=path
-        self.vbname:str=vbname
-        self.version:str=version
-        self.symbol:List[Tuple[str,str,str]]=symbol
-        self.vowel:List[Tuple[str,str]]=vowel
-        self.voicon:List[str]=voicon
-        self.unvcon:List[str]=unvcon
-        self.inde:List[str]=inde
-        self.tail:List[str]=tail
-        self.pitch:str=pitch
-        self.model=model
-    
-def openvb(path:str)->Dvbank:
-    '''
-    打开dv音源，返回Dvbank对象
-    目前支持引擎版本6.1  6.0  5.1  4.02
-    '''
-    import os
-    import json
-    #读sksd
-    sksdname="voice.sksd"
-    for filename in os.listdir(path):
-        if(filename.endswith(".sksd")):
-            sksdname=os.path.join(path,filename)
-            break
-    with open(sksdname,encoding="utf-8-sig") as sksdfile:
-        sksd=json.load(sksdfile)
-    name=sksd["name"]
-    version=sksd["version"]
-    symbol=[]
-    vowel=[]
-    voicon=[]
-    unvcon=[]
-    inde=[]
-    tail=[]
-    pitch=""
-    model=[]
-    #读SKI
-    with open(os.path.join(path,"SKI"),"rb") as skifile:
-        headlength={"6.1":68,
-                    "6.0":64,
-                    "5.1":56,
-                    "4.02":68}
-        #文件头
-        if(version in headlength):
-            skifile.read(headlength[version])
-            #6大发音列表
-            prons=skreadstr(skifile).split("|")
-            if(version in {"6.0","6.1"}):
-                symbol=[]
-                for line in prons[0].split(";"):
-                    symbol.append(tuple(line.split(",")))
-                voicon=prons[1].split(",")
-                unvcon=prons[2].split(",")
-                vowel=[]
-                for line in prons[3].split(";"):
-                    vowel.append(tuple(line.split(",")))
-                inde=prons[4].split(",")
-                tail=prons[5].split(",")
-            elif(version in ["5.1","4.02"]):
-                symbol=[]
-                for line in prons[0].split(";"):
-                    symbol.append(tuple(line.split(",")))
-                voicon=prons[1].split(",")
-                vowel=[]
-                for line in prons[2].split(";"):
-                    vowel.append(tuple(line.split(",")))
-                unvcon=list(set(i[1] for i in symbol)-set(voicon)-set(i[0] for i in vowel))
-                tail=prons[3].split(",")
-                inde=[]
-            deleteemptystr(tail)
-            deleteemptystr(inde)
-            pitch=skreadstr(skifile)#可能是打包的音阶，但目前不确定
-            skifile.read(56)
-            #dv模型列表
-            while(len(skifile.read(4))==4):
-                skifile.read(4)#0
-                mname=skreadstr(skifile)
-                mpitch=skreadstr(skifile)
-                mpointer=skreadint(skifile)
-                skifile.read(4)#0
-                model.append((mname,mpitch,mpointer))
-    return Dvbank(os.path.abspath(path),
-                name,
-                version,
-                symbol,
-                vowel,
-                voicon,
-                unvcon,
-                inde,
-                tail,
-                pitch,
-                model)
-
 def main():
-    pass
+    import mido
+    m=mido.MidiFile(r"gthl.mid")
+    d=to_dv_file(m)
+    d.save(r"gthl.dv")
     
 if(__name__=="__main__"):
     main()
