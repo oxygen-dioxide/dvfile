@@ -1,4 +1,4 @@
-__version__='0.1.2'
+__version__='0.2.0'
 
 
 import copy
@@ -254,7 +254,7 @@ class Dvsegment():
             param[:,0]-=delta
         return self
 
-    def getlyric(self,use_hanzi:bool=False,ignore:set=set()):
+    def getlyric(self,use_hanzi:bool=False,ignore:set=set())->List[str]:
         '''
         获取区段歌词列表
         默认使用dv文件中的拼音，如果需要使用汉字，use_hanzi=True
