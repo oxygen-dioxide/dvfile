@@ -46,8 +46,8 @@ dvÎÄ¼þ¶ÔÏó¿ÉÒÔÓÃsave·½·¨±£´æÎªdvÎÄ¼þ
 ## ÎÄ¼þ¸ñÊ½×ª»»
 dvÎÄ¼þ¶ÔÏó¿ÉÒÔµ¼³öust¡¢nn¡¢mid¡¢musicxmlÎÄ¼þ£¬ÐèÒª°²×°ºÃ¶ÔÓ¦ÎÄ¼þµÄpython¿â
 ```py
->>> d.to_ust_file().save("zhiyaopingfan.ust")#µ¼³öust£¨ÐèÒªutaufile£©
->>> d.to_nn_file().save("zhiyaopingfan.nn")#µ¼³önn£¨ÐèÒªutaufile£©
+>>> d.to_ust_file()[0].save("zhiyaopingfan.ust")#µ¼³öust£¨ÐèÒªutaufile£©
+>>> d.to_nn_file()[0].save("zhiyaopingfan.nn")#µ¼³önn£¨ÐèÒªutaufile£©
 >>> d.to_midi_file().save("zhiyaopingfan.mid")#µ¼³ömid£¨ÐèÒªmido£©
 >>> d.to_music21_score().write("xml",fp="zhiyaopingfan.musicxml")#µ¼³ömusicxml£¨ÐèÒªutaufileºÍmusic21£©
 ```
@@ -63,7 +63,3 @@ dvfileÔÚµ¼³öÎÄ¼þÊ±£¬Èç¹ûÄ¿±êÎÄ¼þ²»Ö§³Öºº×ÖÆ´ÒôË«ÖØ¸è´Ê£¨ust¡¢mid¡¢music21£©£¬ÔòÄ
 ```
 ÓÉÓÚmusic21¿âºÜ´ó£¬µÚÒ»´ÎÔËÐÐÕâÐÐ´úÂëÐèÒªµÈ´ý¼¸ÃëÖÓ£¬È»ºó»á´ò¿ªmusescore´°¿Ú²¢ÏÔÊ¾ÎåÏßÆ×£¬¿ÉÒÔµ¼³öÎªÍ¼Æ¬»òpdfÎÄ¼þ¡£
 ![](Resource/2020-08-11-19-58-16.png)
-
-¶à¹ìdvÎÄ¼þ£¬µ¼³öÎåÏßÆ×¿ÉÄÜ»áÏÔÊ¾¼ÓÔØ´íÎó
-![](Resource/2020-09-02-09-14-55.png)
-ÕâÖÖÇé¿öÇëÎÞÊÓ´íÎó²¢µã»÷¡°Ignore¡±£¬ÎåÏßÆ×¿ÉÒÔÕý³£ÏÔÊ¾£¨´ËÎÊÌâ¿ÉÄÜ»áÔÚÎ´À´°æ±¾µÄDvfileÖÐ½â¾ö£©¡£

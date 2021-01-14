@@ -1,0 +1,10 @@
+transportType:1
+wifiServerAddr:
+softApAddr:
+playLocally:0
+controlPort:8125
+mediaPort:49152
+bufferSize:3
+autoConnect:0
+window:200,200,259,86,745
+btAddress:192.20.161.74.112.12

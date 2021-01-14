@@ -1113,7 +1113,7 @@ class Dvfile():
         sc=music21.stream.Score()
         #音轨
         starttime=self.pos2tick(1)
-        #求音轨长度
+        #求音轨最大长度
         length=max(i.segment[-1].start+i.segment[-1].length for i in self.track)-starttime
         #转换音轨
         for tr in self.track:
